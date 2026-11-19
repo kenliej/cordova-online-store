@@ -1,17 +1,1 @@
-import { ContactUsHeroSection } from "@/components/features/guest/contact-us/contact-us-herc-section";
-import { ContactUsSection1 } from "@/components/features/guest/contact-us/contact-us-section1";
-import { ContactUsSection2 } from "@/components/features/guest/contact-us/contact-us-section2";
-
-export default function GuestContactUsPage() {
-  return (
-    <div className="min-h-screen bg-gray-50">
-      
-      <main>
-        <ContactUsHeroSection />
-        <ContactUsSection1 />
-        <ContactUsSection2 />
-      </main>
-       
-      </div>
-  );
-}
+export { default } from "@/pages/customer/ContactUs";

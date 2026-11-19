@@ -21,6 +21,7 @@ class StoreSummaryResource extends CatalogResource
                 : null,
             'operating_hours' => $this->operating_hours,
             'availability_label' => $this->availabilityLabel(),
+            'description' => $this->description,
             'phone' => $this->phone,
             'is_open' => (bool) $this->is_open,
             'floor_location' => $this->floor_location,

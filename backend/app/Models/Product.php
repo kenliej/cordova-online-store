@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Database\Factories\ProductFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -11,7 +12,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Product extends Model
 {
-    /** @use HasFactory<\Database\Factories\ProductFactory> */
+    /** @use HasFactory<ProductFactory> */
     use HasFactory, SoftDeletes;
 
     /** @var list<string> */
@@ -85,6 +86,66 @@ class Product extends Model
     public function scopeOutOfStock(Builder $query): void
     {
         $query->where('stock', 0);
+    }
+
+    /**
+     * Filter by a product category slug (or numeric id). Parent categories also
+     * match products filed under their children ("Electronics" → "Electronics - Audio").
+     */
+    public function scopeFilterCategory(Builder $query, mixed $category): void
+    {
+        if (! is_string($category) || trim($category) === '') {
+            return;
+        }
+
+        $category = trim($category);
+
+        $model = Category::query()
+            ->where('type', Category::TYPE_PRODUCT)
+            ->where(function (Builder $query) use ($category): void {
+                $query->where('slug', $category)->orWhere('name', $category);
+
+                if (ctype_digit($category)) {
+                    $query->orWhereKey((int) $category);
+                }
+            })
+            ->first();
+
+        if ($model === null) {
+            $query->whereIn('category_id', []);
+
+            return;
+        }
+
+        $ids = $model->children()->pluck('id')->push($model->getKey())->unique()->values()->all();
+
+        $query->whereIn('category_id', $ids);
+    }
+
+    public function scopeSearch(Builder $query, mixed $term): void
+    {
+        if (! is_string($term) || trim($term) === '') {
+            return;
+        }
+
+        $term = trim($term);
+
+        $query->where(function (Builder $query) use ($term): void {
+            $query->where('name', 'like', "%{$term}%")
+                ->orWhere('description', 'like', "%{$term}%");
+        });
+    }
+
+    /**
+     * Whitelisted sorting: price_asc | price_desc | newest.
+     */
+    public function scopeSorted(Builder $query, mixed $sort): void
+    {
+        match ($sort) {
+            'price_asc' => $query->orderBy('price')->orderBy('id'),
+            'price_desc' => $query->orderByDesc('price')->orderBy('id'),
+            default => $query->orderByDesc('created_at')->orderByDesc('id'),
+        };
     }
 
     public function isInStock(): bool

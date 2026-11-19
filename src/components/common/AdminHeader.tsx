@@ -1,18 +1,13 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router";
-import { 
-  Users, 
-  Store, 
-  TrendingUp, 
-  LogOut, 
-  Menu,
-  X
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Users, Store, TrendingUp, Menu, X } from "lucide-react";
+import { LogoutButton } from "@/components/common/LogoutButton";
+import { useAuth } from "@/context/AuthContext";
 import logoImage from "@/assets/logo.webp";
 
 export function AdminHeader() {
   const location = useLocation();
+  const { user } = useAuth();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isVisible, setIsVisible] = useState(true);
   const [lastScrollY, setLastScrollY] = useState(0);
@@ -79,18 +74,13 @@ export function AdminHeader() {
             {/* 2. Centered Welcome Back Admin Text */}
             <div className="flex-1 text-center">
               <h1 className="text-xl sm:text-2xl lg:text-3xl font-black text-[#3087C5] tracking-tight">
-                Welcome Back Admin
+                Welcome Back{user?.name ? `, ${user.name.split(" ")[0]}` : " Admin"}
               </h1>
             </div>
 
             {/* 3. Desktop Logout Button */}
             <div className="hidden md:flex items-center shrink-0">
-              <Link to="/logout">
-                <Button variant="white" size="md" className="shadow-xs rounded-full px-5 py-2 font-bold">
-                  <LogOut className="w-4 h-4 text-gray-700 mr-1.5" />
-                  <span className="text-gray-900">Logout</span>
-                </Button>
-              </Link>
+              <LogoutButton variant="white" size="md" className="shadow-xs rounded-full px-5 py-2 font-bold" />
             </div>
 
             {/* 4. Mobile Hamburger Menu */}
@@ -170,12 +160,16 @@ export function AdminHeader() {
 
         {/* Logout Action in Drawer */}
         <div className="p-4 border-b border-sky-600/50 flex flex-col gap-2">
-          <Link to="/logout" onClick={() => setIsMenuOpen(false)}>
-            <Button variant="white" className="w-full justify-center rounded-full">
-              <LogOut className="w-4 h-4 text-gray-700 mr-2" />
-              <span className="text-gray-900 font-bold">Logout</span>
-            </Button>
-          </Link>
+          <div className="flex items-center space-x-2 px-1">
+            <span className="w-8 h-8 rounded-full bg-[#D4A328] text-white text-xs font-black flex items-center justify-center">
+              {(user?.name ?? "A").charAt(0).toUpperCase()}
+            </span>
+            <div className="min-w-0">
+              <p className="text-sm font-bold truncate">{user?.name}</p>
+              <p className="text-[11px] text-sky-100 truncate">{user?.email}</p>
+            </div>
+          </div>
+          <LogoutButton variant="white" className="w-full justify-center rounded-full" />
         </div>
 
         {/* Nav Links in Drawer */}

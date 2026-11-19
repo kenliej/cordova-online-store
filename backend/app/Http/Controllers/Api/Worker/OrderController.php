@@ -3,29 +3,78 @@
 namespace App\Http\Controllers\Api\Worker;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Order\WorkerOrderStatusRequest;
+use App\Http\Resources\Commerce\OrderResource;
+use App\Models\Order;
+use App\Services\OrderStatusService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 /**
- * SCAFFOLD STUB - replace with the real implementation (docs/BACKEND_ARCHITECTURE.md).
+ * Worker order desk (§5): list/search/see all orders, move them through the
+ * state machine (service enforces transitions + side effects).
  */
 class OrderController extends Controller
 {
-    public function index(mixed ...$args): JsonResponse
+    public function __construct(private readonly OrderStatusService $statuses) {}
+
+    public function index(Request $request): JsonResponse
     {
-        // TODO(implementation): replace this scaffold stub per docs/BACKEND_ARCHITECTURE.md §5.
-        return response()->json(['message' => 'Not implemented yet.'], 501);
+        $validated = $request->validate([
+            'status' => ['nullable', 'string', Rule::in(['pending', 'ready', 'claimed', 'cancelled', 'not_claimed', 'active', 'history', 'all'])],
+            'search' => ['nullable', 'string', 'max:120'],
+            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
+        ]);
+
+        $query = Order::query()->with(['items', 'user']);
+
+        $status = $validated['status'] ?? 'all';
+
+        match ($status) {
+            'active' => $query->active(),
+            'history' => $query->history(),
+            'all' => null,
+            default => $query->where('status', $status),
+        };
+
+        $search = trim((string) ($validated['search'] ?? ''));
+
+        if ($search !== '') {
+            $query->where(function ($builder) use ($search) {
+                $builder->where('order_number', 'like', '%'.$search.'%')
+                    ->orWhereHas('user', fn ($userQuery) => $userQuery->where('name', 'like', '%'.$search.'%'));
+            });
+        }
+
+        $paginator = $query
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->paginate((int) ($validated['per_page'] ?? 20))
+            ->withQueryString();
+
+        return $this->paginated(
+            $paginator,
+            OrderResource::collection($paginator->getCollection())->resolve(),
+        );
     }
 
-    public function show(mixed ...$args): JsonResponse
+    public function show(Order $order): JsonResponse
     {
-        // TODO(implementation): replace this scaffold stub per docs/BACKEND_ARCHITECTURE.md §5.
-        return response()->json(['message' => 'Not implemented yet.'], 501);
+        $order->load(['items', 'histories.actor', 'user']);
+
+        return $this->ok((new OrderResource($order))->resolve());
     }
 
-    public function updateStatus(mixed ...$args): JsonResponse
+    public function updateStatus(WorkerOrderStatusRequest $request, Order $order): JsonResponse
     {
-        // TODO(implementation): replace this scaffold stub per docs/BACKEND_ARCHITECTURE.md §5.
-        return response()->json(['message' => 'Not implemented yet.'], 501);
-    }
+        $order = $this->statuses->transition(
+            $order,
+            (string) $request->input('status'),
+            $request->user(),
+            $request->filled('note') ? (string) $request->input('note') : null,
+        );
 
+        return $this->ok((new OrderResource($order))->resolve(), 'Order status updated.');
+    }
 }

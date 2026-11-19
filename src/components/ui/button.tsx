@@ -1,9 +1,12 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
+import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/cn";
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: "primary" | "secondary" | "gold" | "white" | "outline" | "danger";
   size?: "sm" | "md" | "lg";
+  /** Shows a spinner and disables the button while an async action runs. */
+  loading?: boolean;
   children: ReactNode;
 };
 
@@ -13,6 +16,8 @@ export function Button({
   className,
   children,
   type = "button",
+  loading = false,
+  disabled,
   ...props
 }: ButtonProps) {
   // Color variants tailored to your OnlineMall prototype designs
@@ -46,6 +51,7 @@ export function Button({
   return (
     <button
       type={type}
+      disabled={disabled || loading}
       className={cn(
         "inline-flex items-center justify-center font-semibold rounded-full cursor-pointer transition-all duration-200 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed",
         variants[variant],
@@ -54,6 +60,7 @@ export function Button({
       )}
       {...props}
     >
+      {loading && <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />}
       {children}
     </button>
   );

@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Str;
 
 /**
- * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\Category>
+ * @extends Factory<Category>
  */
 class CategoryFactory extends Factory
 {
@@ -34,7 +34,7 @@ class CategoryFactory extends Factory
         return $this->state(fn (): array => ['type' => Category::TYPE_PRODUCT]);
     }
 
-    public function store(): static
+    public function storeCategory(): static
     {
         return $this->state(fn (): array => ['type' => Category::TYPE_STORE]);
     }

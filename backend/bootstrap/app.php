@@ -21,12 +21,19 @@ return Application::configure(basePath: dirname(__DIR__))
         // Cookie-based SPA authentication (Sanctum) for the React client.
         $middleware->statefulApi();
 
+        // General API ceiling (120 requests/minute per user or IP).
+        $middleware->throttleApi();
+
         $middleware->alias([
             'role' => EnsureRole::class,
         ]);
 
         // Security headers on every response.
         $middleware->append(SecurityHeaders::class);
+
+        // API guests must always get a JSON 401 instead of an attempt to
+        // redirect to a (non-existent) named "login" route.
+        $middleware->redirectGuestsTo(fn (Request $request) => $request->is('api/*') ? null : '/login');
 
         if ($proxies = env('TRUSTED_PROXIES')) {
             $middleware->trustProxies(at: array_map('trim', explode(',', (string) $proxies)));

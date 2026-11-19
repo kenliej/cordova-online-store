@@ -60,6 +60,7 @@ x-app-environment: &app-environment
   MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS:-no-reply@onlinemall.test}
   MAIL_FROM_NAME: "Online Mall Cordova"
   TRUSTED_PROXIES: "127.0.0.1,172.16.0.0/12"
+  TRUSTED_HOSTS: ${TRUSTED_HOSTS:-localhost,127.0.0.1}
   PHP_OPCACHE_VALIDATE_TIMESTAMPS: "0"
 
 services:
@@ -169,7 +170,8 @@ services:
     container_name: onlinemall-mailpit
     restart: unless-stopped
     ports:
-      - "${MAILPIT_UI_PORT:-8025}:8025"
+      # SMTP sink UI is only reachable from the Docker host itself.
+      - "127.0.0.1:${MAILPIT_UI_PORT:-8025}:8025"
     networks:
       - onlinemall
     security_opt:

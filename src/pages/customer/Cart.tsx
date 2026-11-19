@@ -1,139 +1,258 @@
-import { useState } from "react";
-import { 
-  ShoppingCart, 
-  Package, 
-  History, 
-  SlidersHorizontal, 
-  ChevronUp, 
-  ChevronDown, 
-  CheckCircle2 
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router";
+import {
+  ShoppingCart,
+  Package,
+  History,
+  SlidersHorizontal,
+  ChevronUp,
+  ChevronDown,
+  PackageSearch,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { CartCard, type CartItem } from "@/components/ui/CartCard";
-import { OrderCard, type OrderRecord } from "@/components/ui/OrderCard";
+import { CartCard } from "@/components/ui/CartCard";
+import { OrderCard } from "@/components/ui/OrderCard";
 import { OrderDetailsModal } from "@/components/ui/OrderDetailsModal";
+import { EmptyState, ErrorBanner, ListSkeleton } from "@/components/common/Feedback";
+import { useToast } from "@/components/common/Toast";
+import { useAuth } from "@/context/AuthContext";
+import {
+  cancelOrder,
+  checkout,
+  fetchCart,
+  fetchOrders,
+  getErrorMessage,
+  removeCartItem,
+  updateCartItem,
+} from "@/lib/api";
+import { formatPeso } from "@/lib/format";
+import type { CartData, CartItem, OrderRecord } from "@/lib/types";
 
-// Mock Cart Data matching your screenshot
-const INITIAL_CART: CartItem[] = [
-  { id: 1, title: "Sardinas Green Dili ni Halang Promise", price: 100, quantity: 5, image: "https://images.unsplash.com/photo-1579871494447-9811cf80d66c?w=300&auto=format&fit=crop&q=80", selected: true },
-  { id: 2, title: "Wings Powder 1KG", price: 100, quantity: 5, image: "https://images.unsplash.com/photo-1586201375761-83865001e31c?w=300&auto=format&fit=crop&q=80", selected: true },
-  { id: 3, title: "Shampoo para sa mga Gwapo", price: 100, quantity: 5, image: "https://images.unsplash.com/photo-1535585209827-a15fcdbc4c2d?w=300&auto=format&fit=crop&q=80", selected: true },
-  { id: 4, title: "Toothpaste", price: 100, quantity: 5, image: "https://images.unsplash.com/photo-1556228720-195a672e8a03?w=300&auto=format&fit=crop&q=80", selected: true },
-  { id: 5, title: "Egg", price: 100, quantity: 5, image: "https://images.unsplash.com/photo-1516467508483-a7212febe31a?w=300&auto=format&fit=crop&q=80", selected: false },
-];
-
-const SAMPLE_ITEMS = [
-  { id: 101, title: "Sardinas Green Dili ni Halang Promise", price: 100, quantity: 2, image: "https://images.unsplash.com/photo-1579871494447-9811cf80d66c?w=300&auto=format&fit=crop&q=80" },
-  { id: 102, title: "Wings Powder 1KG", price: 100, quantity: 1, image: "https://images.unsplash.com/photo-1586201375761-83865001e31c?w=300&auto=format&fit=crop&q=80" },
-  { id: 103, title: "Shampoo para sa mga Gwapo", price: 100, quantity: 3, image: "https://images.unsplash.com/photo-1535585209827-a15fcdbc4c2d?w=300&auto=format&fit=crop&q=80" },
-  { id: 104, title: "Toothpaste", price: 100, quantity: 2, image: "https://images.unsplash.com/photo-1556228720-195a672e8a03?w=300&auto=format&fit=crop&q=80" },
-  { id: 105, title: "Egg", price: 100, quantity: 4, image: "https://images.unsplash.com/photo-1516467508483-a7212febe31a?w=300&auto=format&fit=crop&q=80" },
-];
-
-// Mock Orders Data
-const INITIAL_ORDERS: OrderRecord[] = [
-  { id: "1564132164872", status: "Pending", dateOrdered: "10/23/2026", totalPrice: 1500, items: SAMPLE_ITEMS },
-  { id: "1564132164873", status: "Ready to Claim", dateOrdered: "10/23/2026", totalPrice: 1500, items: SAMPLE_ITEMS },
-];
-
-// Mock History Data
-const INITIAL_HISTORY: OrderRecord[] = [
-  { id: "1564132164874", status: "Claimed", dateOrdered: "10/23/2026", totalPrice: 1500, items: SAMPLE_ITEMS },
-  { id: "1564132164875", status: "Cancelled", dateOrdered: "10/23/2026", totalPrice: 1500, items: SAMPLE_ITEMS },
-  { id: "1564132164876", status: "Didn't Claimed", dateOrdered: "10/23/2026", totalPrice: 1500, items: SAMPLE_ITEMS },
-];
+type Tab = "Cart" | "Orders" | "History";
 
 export default function CartPage() {
-  const [activeTab, setActiveTab] = useState<"Cart" | "Orders" | "History">("Cart");
+  const navigate = useNavigate();
+  const toast = useToast();
+  const { refreshCartCount } = useAuth();
+
+  const [activeTab, setActiveTab] = useState<Tab>("Cart");
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  
-  const [cartItems, setCartItems] = useState<CartItem[]>(INITIAL_CART);
-  const [orders, setOrders] = useState<OrderRecord[]>(INITIAL_ORDERS);
-  const [history, setHistory] = useState<OrderRecord[]>(INITIAL_HISTORY);
+
+  const [cart, setCart] = useState<CartData | null>(null);
+  const [isCartLoading, setIsCartLoading] = useState(true);
+  const [cartError, setCartError] = useState("");
+  const [pendingItemIds, setPendingItemIds] = useState<number[]>([]);
+  const [isCheckingOut, setIsCheckingOut] = useState(false);
+
+  const [orders, setOrders] = useState<OrderRecord[]>([]);
+  const [history, setHistory] = useState<OrderRecord[]>([]);
+  const [isOrdersLoading, setIsOrdersLoading] = useState(true);
+  const [ordersError, setOrdersError] = useState("");
+  const [cancellingId, setCancellingId] = useState<number | null>(null);
 
   const [selectedOrderDetails, setSelectedOrderDetails] = useState<OrderRecord | null>(null);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Cart Handlers
-  const handleToggleSelectAll = () => {
-    const allSelected = cartItems.every((item) => item.selected);
-    setCartItems(cartItems.map((item) => ({ ...item, selected: !allSelected })));
+  const cartItems = cart?.items ?? [];
+  const selectedItems = useMemo(() => cartItems.filter((item) => item.selected), [cartItems]);
+  const selectedCount = useMemo(
+    () => selectedItems.reduce((sum, item) => sum + item.quantity, 0),
+    [selectedItems],
+  );
+  const totalPrice = useMemo(
+    () => selectedItems.reduce((sum, item) => sum + item.price * item.quantity, 0),
+    [selectedItems],
+  );
+
+  const loadCart = useCallback(async () => {
+    setIsCartLoading(true);
+    setCartError("");
+    try {
+      const data = await fetchCart();
+      setCart(data);
+    } catch (error) {
+      setCartError(getErrorMessage(error, "Could not load your cart. Please try again."));
+      setCart(null);
+    } finally {
+      setIsCartLoading(false);
+    }
+  }, []);
+
+  const loadOrders = useCallback(async () => {
+    setIsOrdersLoading(true);
+    setOrdersError("");
+    try {
+      const [active, past] = await Promise.all([
+        fetchOrders({ status: "active", perPage: 50 }),
+        fetchOrders({ status: "history", perPage: 50 }),
+      ]);
+      setOrders(active.items);
+      setHistory(past.items);
+    } catch (error) {
+      setOrdersError(getErrorMessage(error, "Could not load your orders. Please try again."));
+      setOrders([]);
+      setHistory([]);
+    } finally {
+      setIsOrdersLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadCart();
+    void loadOrders();
+  }, [loadCart, loadOrders]);
+
+  useEffect(() => {
+    if (activeTab !== "Cart") void loadOrders();
+  }, [activeTab, loadOrders]);
+
+  const markPending = (id: number, pending: boolean) => {
+    setPendingItemIds((current) =>
+      pending ? [...current, id] : current.filter((itemId) => itemId !== id),
+    );
   };
 
-  const handleToggleSelect = (id: number) => {
-    setCartItems(cartItems.map((item) => item.id === id ? { ...item, selected: !item.selected } : item));
+  const applyCartItemChange = (id: number, patch: Partial<CartItem>) => {
+    setCart((current) =>
+      current
+        ? {
+            ...current,
+            items: current.items.map((item) => (item.id === id ? { ...item, ...patch } : item)),
+          }
+        : current,
+    );
   };
 
-  const handleUpdateQty = (id: number, delta: number) => {
-    setCartItems(cartItems.map((item) => {
-      if (item.id === id) {
-        const newQty = Math.max(1, item.quantity + delta);
-        return { ...item, quantity: newQty };
-      }
-      return item;
-    }));
+  const handleToggleSelect = async (id: number) => {
+    const item = cartItems.find((entry) => entry.id === id);
+    if (!item || pendingItemIds.includes(id)) return;
+    const nextSelected = !item.selected;
+    applyCartItemChange(id, { selected: nextSelected });
+    markPending(id, true);
+    try {
+      await updateCartItem(id, { selected: nextSelected });
+    } catch (error) {
+      applyCartItemChange(id, { selected: item.selected });
+      toast.error(getErrorMessage(error, "Could not update the item selection."));
+    } finally {
+      markPending(id, false);
+    }
   };
 
-  const handleRemoveItem = (id: number) => {
-    setCartItems(cartItems.filter((item) => item.id !== id));
-    setToastMessage("Item removed from cart");
-    setTimeout(() => setToastMessage(null), 3000);
+  const handleToggleSelectAll = async () => {
+    if (cartItems.length === 0) return;
+    const shouldSelect = !cartItems.every((item) => item.selected);
+    const previous = cartItems;
+    setCart((current) =>
+      current ? { ...current, items: current.items.map((item) => ({ ...item, selected: shouldSelect })) } : current,
+    );
+    try {
+      await Promise.all(
+        previous
+          .filter((item) => item.selected !== shouldSelect)
+          .map((item) => updateCartItem(item.id, { selected: shouldSelect })),
+      );
+    } catch (error) {
+      setCart((current) => (current ? { ...current, items: previous } : current));
+      toast.error(getErrorMessage(error, "Could not update the cart selection."));
+    }
   };
 
-  const selectedCount = cartItems.filter((i) => i.selected).reduce((acc, curr) => acc + curr.quantity, 0);
-  const totalPrice = cartItems.filter((i) => i.selected).reduce((acc, curr) => acc + (curr.price * curr.quantity), 0);
-
-  const handleCheckout = () => {
-    if (selectedCount === 0) {
-      alert("Please select items to check out.");
+  const handleUpdateQty = async (id: number, delta: number) => {
+    const item = cartItems.find((entry) => entry.id === id);
+    if (!item || pendingItemIds.includes(id)) return;
+    const nextQuantity = Math.max(1, item.quantity + delta);
+    if (item.stock > 0 && nextQuantity > item.stock) {
+      toast.error(`Only ${item.stock} unit${item.stock === 1 ? "" : "s"} available for "${item.title}".`);
       return;
     }
-    setToastMessage("Checkout successful! Order placed.");
-    setCartItems(cartItems.filter((i) => !i.selected));
-    setTimeout(() => setToastMessage(null), 3500);
+    applyCartItemChange(id, { quantity: nextQuantity });
+    markPending(id, true);
+    try {
+      await updateCartItem(id, { quantity: nextQuantity });
+      await refreshCartCount();
+    } catch (error) {
+      applyCartItemChange(id, { quantity: item.quantity });
+      toast.error(getErrorMessage(error, "Could not update the quantity."));
+    } finally {
+      markPending(id, false);
+    }
   };
 
-  // Orders Cancel Handler
-  const handleCancelOrder = (id: string) => {
-    const orderToCancel = orders.find((o) => o.id === id);
-    if (!orderToCancel) return;
-
-    setOrders(orders.filter((o) => o.id !== id));
-    setHistory([{ ...orderToCancel, status: "Cancelled" }, ...history]);
-    setToastMessage(`Order #${id} has been cancelled.`);
-    setTimeout(() => setToastMessage(null), 3500);
+  const handleRemoveItem = async (id: number) => {
+    if (pendingItemIds.includes(id)) return;
+    const item = cartItems.find((entry) => entry.id === id);
+    markPending(id, true);
+    try {
+      await removeCartItem(id);
+      setCart((current) =>
+        current ? { ...current, items: current.items.filter((entry) => entry.id !== id) } : current,
+      );
+      await refreshCartCount();
+      toast.success("Item removed from cart");
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Could not remove this item from your cart."));
+    } finally {
+      markPending(id, false);
+    }
+    if (item) setSelectedOrderDetails((current) => current);
   };
 
-  const navTabs = [
-    { name: "Cart", icon: ShoppingCart, count: cartItems.length },
+  const handleCheckout = async () => {
+    if (selectedItems.length === 0) {
+      toast.error("Please select items to check out.");
+      return;
+    }
+    setIsCheckingOut(true);
+    try {
+      const result = await checkout({ itemIds: selectedItems.map((item) => item.id) });
+      toast.success(result.message);
+      await Promise.all([loadCart(), loadOrders(), refreshCartCount()]);
+      setActiveTab("Orders");
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Checkout failed. Please try again."));
+      await loadCart();
+    } finally {
+      setIsCheckingOut(false);
+    }
+  };
+
+  const handleCancelOrder = async (id: string) => {
+    const order = orders.find((entry) => entry.id === id);
+    if (!order || cancellingId !== null) return;
+    const dbId = order.dbId ?? Number.parseInt(order.id, 10);
+    if (!Number.isFinite(dbId)) {
+      toast.error("This order cannot be cancelled right now.");
+      return;
+    }
+    setCancellingId(dbId);
+    try {
+      await cancelOrder(dbId);
+      toast.success(`Order #${order.orderNumber ?? order.id} has been cancelled.`);
+      await loadOrders();
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Could not cancel this order."));
+      await loadOrders();
+    } finally {
+      setCancellingId(null);
+    }
+  };
+
+  const navTabs: { name: Tab; icon: typeof ShoppingCart; count: number }[] = [
+    { name: "Cart", icon: ShoppingCart, count: cartItems.reduce((sum, item) => sum + item.quantity, 0) },
     { name: "Orders", icon: Package, count: orders.length },
     { name: "History", icon: History, count: history.length },
   ];
 
   return (
     <section className="bg-[#EBE9E1] w-full min-h-[85vh] py-10 px-4 sm:px-6 relative font-sans">
-      
-      {/* Toast Notification Popup */}
-      {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 bg-gray-900 text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center space-x-3 border border-white/10 animate-bounce">
-          <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
-          <p className="text-sm font-semibold">{toastMessage}</p>
-        </div>
-      )}
-
       {/* Order Details Popup Modal */}
-      <OrderDetailsModal 
-        order={selectedOrderDetails} 
-        onClose={() => setSelectedOrderDetails(null)} 
-      />
+      <OrderDetailsModal order={selectedOrderDetails} onClose={() => setSelectedOrderDetails(null)} />
 
       <div className="max-w-7xl mx-auto flex flex-col lg:flex-row gap-8 items-start">
-        
-        {/* SIDEBAR FILTERS / NAVIGATION (#E3DFD3 unified background container) */}
+        {/* SIDEBAR NAVIGATION (#E3DFD3 unified background container) */}
         <aside className="w-full lg:w-85 shrink-0 bg-[#E3DFD3] border border-gray-300/80 rounded-2xl p-5 shadow-sm space-y-6">
-          
           <div>
-            <div 
+            <div
               className="flex items-center justify-between cursor-pointer pb-3"
               onClick={() => setIsSidebarOpen(!isSidebarOpen)}
             >
@@ -143,12 +262,12 @@ export default function CartPage() {
                 </div>
                 <h3 className="font-black text-gray-900 text-base">Shopping Center</h3>
               </div>
-              <button className="text-gray-600 hover:text-gray-900">
+              <button className="text-gray-600 hover:text-gray-900" aria-label="Toggle shopping center menu">
                 {isSidebarOpen ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
               </button>
             </div>
 
-            {/* Navigation Tab List with rounded-none and space-y-0 */}
+            {/* Navigation Tab List */}
             {isSidebarOpen && (
               <div className="mt-2 space-y-0 border-t border-gray-300/60 overflow-hidden">
                 {navTabs.map((tab) => {
@@ -157,10 +276,10 @@ export default function CartPage() {
                   return (
                     <button
                       key={tab.name}
-                      onClick={() => setActiveTab(tab.name as any)}
+                      onClick={() => setActiveTab(tab.name)}
                       className={`w-full flex items-center justify-between px-3.5 py-3 text-xs sm:text-sm font-bold transition-all rounded-none ${
-                        isSelected 
-                          ? "bg-white text-gray-900 border-l-4 border-[#3087C5] shadow-xs" 
+                        isSelected
+                          ? "bg-white text-gray-900 border-l-4 border-[#3087C5] shadow-xs"
                           : "bg-white/40 text-gray-700 hover:bg-white/70 border-l-4 border-transparent"
                       }`}
                     >
@@ -177,95 +296,118 @@ export default function CartPage() {
               </div>
             )}
           </div>
-
         </aside>
 
         {/* MAIN CONTENT AREA */}
         <div className="flex-1 w-full space-y-5">
-          
           {/* TAB 1: CART */}
           {activeTab === "Cart" && (
             <div className="space-y-4">
-              
-              {/* Select All & Summary Header Bar */}
-              <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4">
-                <div className="flex items-center space-x-3 w-full sm:w-auto">
-                  <input
-                    type="checkbox"
-                    checked={cartItems.length > 0 && cartItems.every((i) => i.selected)}
-                    onChange={handleToggleSelectAll}
-                    className="w-5 h-5 text-[#3087C5] rounded border-gray-300 focus:ring-[#3087C5] cursor-pointer"
-                  />
-                  <span className="font-bold text-gray-900 text-sm">Select All</span>
-                </div>
+              {isCartLoading && <ListSkeleton count={4} />}
 
-                <div className="flex items-center justify-between sm:justify-end space-x-6 w-full sm:w-auto">
-                  <div className="text-xs sm:text-sm font-bold text-gray-700">
-                    Items selected: <span className="text-[#3087C5] font-black">{selectedCount}</span>
-                  </div>
-                  <div className="text-xs sm:text-sm font-bold text-gray-700">
-                    Total: <span className="text-gray-900 font-black">₱{totalPrice.toLocaleString()}</span>
-                  </div>
-                  <Button 
-                    variant="gold" 
-                    size="md" 
-                    onClick={handleCheckout}
-                    className="shadow-md font-extrabold uppercase tracking-wider"
-                  >
-                    <ShoppingCart className="w-4 h-4 mr-1.5" />
-                    <span>Check out</span>
-                  </Button>
-                </div>
-              </div>
+              {!isCartLoading && cartError && <ErrorBanner message={cartError} onRetry={() => void loadCart()} />}
 
-              {/* Cart Cards List */}
-              {cartItems.length > 0 ? (
-                <div className="space-y-3">
-                  {cartItems.map((item) => (
-                    <CartCard
-                      key={item.id}
-                      item={item}
-                      onToggleSelect={handleToggleSelect}
-                      onUpdateQty={handleUpdateQty}
-                      onRemove={handleRemoveItem}
-                      onViewProduct={(product) => alert(`Viewing product: ${product.title}`)}
+              {!isCartLoading && !cartError && (
+                <>
+                  {/* Select All & Summary Header Bar */}
+                  <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <div className="flex items-center space-x-3 w-full sm:w-auto">
+                      <input
+                        type="checkbox"
+                        checked={cartItems.length > 0 && cartItems.every((item) => item.selected)}
+                        onChange={() => void handleToggleSelectAll()}
+                        disabled={cartItems.length === 0}
+                        aria-label="Select all cart items"
+                        className="w-5 h-5 text-[#3087C5] rounded border-gray-300 focus:ring-[#3087C5] cursor-pointer"
+                      />
+                      <span className="font-bold text-gray-900 text-sm">Select All</span>
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-between sm:justify-end gap-4 sm:gap-6 w-full sm:w-auto">
+                      <div className="text-xs sm:text-sm font-bold text-gray-700">
+                        Items selected: <span className="text-[#3087C5] font-black">{selectedCount}</span>
+                      </div>
+                      <div className="text-xs sm:text-sm font-bold text-gray-700">
+                        Total: <span className="text-gray-900 font-black">{formatPeso(totalPrice)}</span>
+                      </div>
+                      <Button
+                        variant="gold"
+                        size="md"
+                        onClick={() => void handleCheckout()}
+                        disabled={isCheckingOut || selectedItems.length === 0}
+                        loading={isCheckingOut}
+                        className="shadow-md font-extrabold uppercase tracking-wider"
+                      >
+                        {!isCheckingOut && <ShoppingCart className="w-4 h-4 mr-1.5" />}
+                        <span>Check out</span>
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Cart Cards List */}
+                  {cartItems.length > 0 ? (
+                    <div className="space-y-3">
+                      {cartItems.map((item) => (
+                        <CartCard
+                          key={item.id}
+                          item={item}
+                          onToggleSelect={(id) => void handleToggleSelect(id)}
+                          onUpdateQty={(id, delta) => void handleUpdateQty(id, delta)}
+                          onRemove={(id) => void handleRemoveItem(id)}
+                          onViewProduct={(product) => navigate(`/products/${product.slug}`)}
+                          pending={pendingItemIds.includes(item.id)}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <EmptyState
+                      icon={<ShoppingCart className="w-12 h-12" />}
+                      title="Your cart is empty"
+                      description="Explore our catalog and add items to your cart."
+                      action={
+                        <Button variant="primary" size="md" onClick={() => navigate("/products")}>
+                          Browse Products
+                        </Button>
+                      }
                     />
-                  ))}
-                </div>
-              ) : (
-                <div className="bg-white rounded-3xl p-12 text-center border border-gray-200 shadow-sm">
-                  <ShoppingCart className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                  <h3 className="font-bold text-gray-800 text-lg mb-1">Your cart is empty</h3>
-                  <p className="text-sm text-gray-500">Explore our catalog and add items to your cart.</p>
-                </div>
+                  )}
+                </>
               )}
-
             </div>
           )}
 
           {/* TAB 2: ORDERS */}
           {activeTab === "Orders" && (
             <div className="space-y-4">
-              <div className="bg-white/60 backdrop-blur-xs p-4 rounded-2xl border border-gray-300/60 shadow-xs">
+              <div className="bg-white/60 backdrop-blur-xs p-4 rounded-2xl border border-gray-300/60 shadow-xs flex items-center justify-between gap-2">
                 <h2 className="text-lg font-black text-gray-900">Active Orders</h2>
+                <Button variant="outline" size="sm" onClick={() => void loadOrders()} className="rounded-full text-xs">
+                  Refresh
+                </Button>
               </div>
 
-              {orders.length > 0 ? (
+              {isOrdersLoading && <ListSkeleton count={2} />}
+              {!isOrdersLoading && ordersError && (
+                <ErrorBanner message={ordersError} onRetry={() => void loadOrders()} />
+              )}
+              {!isOrdersLoading && !ordersError && orders.length === 0 && (
+                <EmptyState
+                  icon={<Package className="w-12 h-12" />}
+                  title="No active orders"
+                  description="Your pending or ready-to-claim orders will appear here."
+                />
+              )}
+              {!isOrdersLoading && !ordersError && orders.length > 0 && (
                 <div className="space-y-3">
                   {orders.map((order) => (
                     <OrderCard
                       key={order.id}
                       order={order}
-                      onCancel={order.status === "Pending" ? handleCancelOrder : undefined}
-                      onViewDetails={(ord) => setSelectedOrderDetails(ord)}
+                      onCancel={order.status === "Pending" ? (id) => void handleCancelOrder(id) : undefined}
+                      cancelling={cancellingId === order.dbId}
+                      onViewDetails={(record) => setSelectedOrderDetails(record)}
                     />
                   ))}
-                </div>
-              ) : (
-                <div className="bg-white rounded-3xl p-12 text-center border border-gray-200 shadow-sm">
-                  <Package className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                  <h3 className="font-bold text-gray-800 text-lg mb-1">No active orders</h3>
-                  <p className="text-sm text-gray-500">Your pending or ready-to-claim orders will appear here.</p>
                 </div>
               )}
             </div>
@@ -274,32 +416,38 @@ export default function CartPage() {
           {/* TAB 3: HISTORY */}
           {activeTab === "History" && (
             <div className="space-y-4">
-              <div className="bg-white/60 backdrop-blur-xs p-4 rounded-2xl border border-gray-300/60 shadow-xs">
+              <div className="bg-white/60 backdrop-blur-xs p-4 rounded-2xl border border-gray-300/60 shadow-xs flex items-center justify-between gap-2">
                 <h2 className="text-lg font-black text-gray-900">Order History</h2>
+                <Button variant="outline" size="sm" onClick={() => void loadOrders()} className="rounded-full text-xs">
+                  Refresh
+                </Button>
               </div>
 
-              {history.length > 0 ? (
+              {isOrdersLoading && <ListSkeleton count={2} />}
+              {!isOrdersLoading && ordersError && (
+                <ErrorBanner message={ordersError} onRetry={() => void loadOrders()} />
+              )}
+              {!isOrdersLoading && !ordersError && history.length === 0 && (
+                <EmptyState
+                  icon={<PackageSearch className="w-12 h-12" />}
+                  title="No order history"
+                  description="Completed or cancelled orders will appear here."
+                />
+              )}
+              {!isOrdersLoading && !ordersError && history.length > 0 && (
                 <div className="space-y-3">
                   {history.map((record) => (
                     <OrderCard
                       key={record.id}
                       order={record}
-                      onViewDetails={(ord) => setSelectedOrderDetails(ord)}
+                      onViewDetails={(order) => setSelectedOrderDetails(order)}
                     />
                   ))}
-                </div>
-              ) : (
-                <div className="bg-white rounded-3xl p-12 text-center border border-gray-200 shadow-sm">
-                  <History className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                  <h3 className="font-bold text-gray-800 text-lg mb-1">No order history</h3>
-                  <p className="text-sm text-gray-500">Completed or cancelled orders will appear here.</p>
                 </div>
               )}
             </div>
           )}
-
         </div>
-
       </div>
     </section>
   );

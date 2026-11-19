@@ -1,94 +1,134 @@
-import { useState } from "react";
-import { 
-  Bell, 
-  Tag, 
-  Package, 
-  Megaphone, 
-  Search, 
-  Filter, 
-  ChevronDown, 
-  ChevronUp, 
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  Bell,
+  Tag,
+  Package,
+  Megaphone,
+  Search,
+  Filter,
+  ChevronDown,
+  ChevronUp,
   SlidersHorizontal,
-  X 
+  X,
+  CheckCheck,
 } from "lucide-react";
 import { NotificationCard } from "@/components/ui/NotificationCard";
-import type { NotificationItem } from "@/components/ui/NotificationCard";
+import { EmptyState, ErrorBanner, InlineSpinner, ListSkeleton } from "@/components/common/Feedback";
+import { useToast } from "@/components/common/Toast";
+import {
+  fetchNotifications,
+  getErrorMessage,
+  markAllNotificationsRead,
+  markNotificationRead,
+  notificationCategoryForApi,
+} from "@/lib/api";
+import type { NotificationCounts, NotificationItem } from "@/lib/types";
 
-// Mock Notifications Data matching your reference layout
-const ALL_NOTIFICATIONS: NotificationItem[] = [
-  {
-    id: 1,
-    title: "Flash sale",
-    description: "Up to 50% off select brands, plus 50% off all store brands.",
-    category: "Offers & Sales",
-    time: "1mins ago",
-    icon: <Tag className="w-5 h-5" />,
-  },
-  {
-    id: 2,
-    title: "Discount Reminder",
-    description: "Final hours! Enjoy up to 70% off top featured brands and 70% off all our exclusive house brands.",
-    category: "Offers & Sales",
-    time: "1mins ago",
-    icon: <Tag className="w-5 h-5" />,
-  },
-  {
-    id: 3,
-    title: "Flash sale",
-    description: "Our flash sale is live! Take up to 50% off select brands and 50% off all your brands today.",
-    category: "Offers & Sales",
-    time: "2mins ago",
-    icon: <Tag className="w-5 h-5" />,
-  },
-  {
-    id: 4,
-    title: "Order",
-    description: "order pending",
-    category: "Order",
-    time: "5mins ago",
-    icon: <Package className="w-5 h-5" />,
-  },
-  {
-    id: 5,
-    title: "New Update ver 1.1",
-    description: "System Update: Our website has been updated to improve your browsing experience. [Learn More]",
-    category: "System",
-    time: "10/5/26",
-    icon: <Megaphone className="w-5 h-5" />,
-  },
-];
+type CategoryFilter = "All" | "Offers & Sales" | "Order" | "System";
 
-const CATEGORIES = [
-  { name: "All", icon: Bell, count: 5 },
-  { name: "Offers & Sales", icon: Tag, count: 3 },
-  { name: "Order", icon: Package, count: 1 },
-  { name: "System", icon: Megaphone, count: 1 },
+const CATEGORIES: { name: CategoryFilter; icon: typeof Bell; countKey: keyof NotificationCounts | null }[] = [
+  { name: "All", icon: Bell, countKey: "all" },
+  { name: "Offers & Sales", icon: Tag, countKey: "offers" },
+  { name: "Order", icon: Package, countKey: "order" },
+  { name: "System", icon: Megaphone, countKey: "system" },
 ];
 
 export function NotificationsSection1() {
-  const [selectedCategory, setSelectedCategory] = useState("All");
+  const toast = useToast();
+  const [selectedCategory, setSelectedCategory] = useState<CategoryFilter>("All");
+  const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [counts, setCounts] = useState<NotificationCounts>({ all: 0, offers: 0, order: 0, system: 0 });
+  const [unread, setUnread] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [markingIds, setMarkingIds] = useState<number[]>([]);
+  const [isMarkingAll, setIsMarkingAll] = useState(false);
   const [isCategoryOpen, setIsCategoryOpen] = useState(true);
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Filter and Search logic
-  const filteredNotifications = ALL_NOTIFICATIONS.filter((notif) => {
-    if (selectedCategory !== "All" && notif.category !== selectedCategory) {
-      return false;
+  // Debounce the search box into the server query.
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => setSearchQuery(searchInput.trim()), 350);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [searchInput]);
+
+  const loadNotifications = useCallback(async () => {
+    setIsLoading(true);
+    setError("");
+    try {
+      const data = await fetchNotifications({
+        category: selectedCategory === "All" ? undefined : notificationCategoryForApi(selectedCategory),
+        search: searchQuery || undefined,
+      });
+      setNotifications(data.items);
+      setCounts(data.counts);
+      setUnread(data.unread);
+    } catch (loadError) {
+      setError(getErrorMessage(loadError, "Could not load your notifications. Please try again."));
+      setNotifications([]);
+    } finally {
+      setIsLoading(false);
     }
-    if (searchQuery.trim() !== "") {
-      const query = searchQuery.toLowerCase();
-      const matchTitle = notif.title.toLowerCase().includes(query);
-      const matchDesc = notif.description.toLowerCase().includes(query);
-      if (!matchTitle && !matchDesc) return false;
+  }, [searchQuery, selectedCategory]);
+
+  useEffect(() => {
+    void loadNotifications();
+  }, [loadNotifications]);
+
+  const handleMarkRead = async (notification: NotificationItem) => {
+    if (notification.read || markingIds.includes(notification.id)) return;
+    setMarkingIds((current) => [...current, notification.id]);
+    // Optimistic: reflect immediately, roll back on failure.
+    setNotifications((current) =>
+      current.map((item) => (item.id === notification.id ? { ...item, read: true } : item)),
+    );
+    setUnread((current) => Math.max(0, current - 1));
+    try {
+      await markNotificationRead(notification.id);
+    } catch (markError) {
+      setNotifications((current) =>
+        current.map((item) => (item.id === notification.id ? { ...item, read: false } : item)),
+      );
+      setUnread((current) => current + 1);
+      toast.error(getErrorMessage(markError, "Could not mark the notification as read."));
+    } finally {
+      setMarkingIds((current) => current.filter((id) => id !== notification.id));
     }
-    return true;
-  });
+  };
+
+  const handleMarkAllRead = async () => {
+    if (isMarkingAll || unread === 0) return;
+    setIsMarkingAll(true);
+    try {
+      await markAllNotificationsRead();
+      setNotifications((current) => current.map((item) => ({ ...item, read: true })));
+      setUnread(0);
+      setCounts((current) => ({ ...current }));
+      toast.success("All notifications marked as read.");
+    } catch (markError) {
+      toast.error(getErrorMessage(markError, "Could not mark all notifications as read."));
+    } finally {
+      setIsMarkingAll(false);
+    }
+  };
+
+  const clearFilters = () => {
+    setSelectedCategory("All");
+    setSearchInput("");
+    setSearchQuery("");
+  };
+
+  const hasFilters = selectedCategory !== "All" || searchQuery.length > 0;
 
   return (
     <section className="bg-[#EBE9E1] w-full py-10 px-4 sm:px-6 relative">
       <div className="max-w-7xl mx-auto flex flex-col lg:flex-row gap-8 items-start">
-        
         {/* MOBILE FILTER BUTTON */}
         <div className="w-full lg:hidden">
           <button
@@ -100,14 +140,15 @@ export function NotificationsSection1() {
           </button>
         </div>
 
-        {/* SIDEBAR FILTERS (#E3DFD3 unified background container matching reference layout) */}
-        <aside className={`w-full lg:w-85 shrink-0 bg-[#E3DFD3] border border-gray-300/80 rounded-2xl p-5 shadow-sm space-y-6 ${
-          isMobileFilterOpen ? "block" : "hidden lg:block"
-        }`}>
-          
+        {/* SIDEBAR FILTERS */}
+        <aside
+          className={`w-full lg:w-85 shrink-0 bg-[#E3DFD3] border border-gray-300/80 rounded-2xl p-5 shadow-sm space-y-6 ${
+            isMobileFilterOpen ? "block" : "hidden lg:block"
+          }`}
+        >
           <div>
             {/* Collapsible Header */}
-            <div 
+            <div
               className="flex items-center justify-between cursor-pointer pb-3"
               onClick={() => setIsCategoryOpen(!isCategoryOpen)}
             >
@@ -117,68 +158,88 @@ export function NotificationsSection1() {
                 </div>
                 <h3 className="font-black text-gray-900 text-base">Notifications Center</h3>
               </div>
-              <button className="text-gray-600 hover:text-gray-900">
+              <button className="text-gray-600 hover:text-gray-900" aria-label="Toggle notification categories">
                 {isCategoryOpen ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
               </button>
             </div>
 
-            {/* Category List with rounded-none and space-y-0 */}
             {isCategoryOpen && (
               <div className="mt-2 space-y-0 border-t border-gray-300/60 max-h-[380px] overflow-y-auto">
-                {CATEGORIES.map((cat) => {
-                  const Icon = cat.icon;
-                  const isSelected = selectedCategory === cat.name;
+                {CATEGORIES.map((category) => {
+                  const Icon = category.icon;
+                  const isSelected = selectedCategory === category.name;
+                  const count = category.countKey ? counts[category.countKey] : 0;
                   return (
                     <button
-                      key={cat.name}
+                      key={category.name}
                       onClick={() => {
-                        setSelectedCategory(cat.name);
+                        setSelectedCategory(category.name);
                         setIsMobileFilterOpen(false);
                       }}
                       className={`w-full flex items-center justify-between px-3 py-2.5 text-xs sm:text-sm font-bold transition-all rounded-none ${
-                        isSelected 
-                          ? "bg-white text-gray-900 border-l-4 border-[#3087C5] shadow-xs" 
+                        isSelected
+                          ? "bg-white text-gray-900 border-l-4 border-[#3087C5] shadow-xs"
                           : "bg-white/40 text-gray-700 hover:bg-white/70 border-l-4 border-transparent"
                       }`}
                     >
                       <div className="flex items-center space-x-3">
                         <Icon className="w-4 h-4 text-[#3087C5]" />
-                        <span className="truncate text-left">{cat.name}</span>
+                        <span className="truncate text-left">{category.name}</span>
                       </div>
                       <span className="text-xs font-semibold text-gray-500 bg-gray-200/60 px-2 py-0.5 rounded-full shrink-0">
-                        ({cat.count})
+                        ({count})
                       </span>
                     </button>
                   );
                 })}
               </div>
             )}
-          </div>
 
+            {/* Unread summary + mark all */}
+            <div className="mt-4 border-t border-gray-300/60 pt-4 space-y-2">
+              <p className="text-xs font-bold text-gray-600">
+                Unread: <span className="text-[#3087C5] font-black">{unread}</span>
+              </p>
+              <button
+                type="button"
+                onClick={() => void handleMarkAllRead()}
+                disabled={unread === 0 || isMarkingAll}
+                className="inline-flex items-center gap-1.5 rounded-full bg-[#3087C5] px-3 py-1.5 text-[11px] font-bold text-white disabled:opacity-40 hover:bg-[#256fa4] transition-colors"
+              >
+                {isMarkingAll ? <InlineSpinner className="w-3 h-3" /> : <CheckCheck className="w-3.5 h-3.5" />}
+                <span>{isMarkingAll ? "Marking…" : "Mark all as read"}</span>
+              </button>
+            </div>
+          </div>
         </aside>
 
         {/* NOTIFICATIONS FEED RESULTS */}
         <div className="flex-1 w-full space-y-5">
-          
           {/* Header & Search Bar */}
           <div className="bg-white/60 backdrop-blur-xs p-4 rounded-2xl border border-gray-300/60 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4">
             <h2 className="text-lg font-black text-gray-900">
               Recent Notifications
+              {unread > 0 && (
+                <span className="ml-2 inline-flex items-center rounded-full bg-[#D4A328] px-2 py-0.5 text-[10px] font-black text-white align-middle">
+                  {unread} unread
+                </span>
+              )}
             </h2>
 
-            {/* Search Bar matching reference image */}
+            {/* Search Bar */}
             <div className="relative w-full sm:w-80 flex items-center">
               <input
                 type="text"
                 placeholder="Search"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                value={searchInput}
+                onChange={(event) => setSearchInput(event.target.value)}
                 className="w-full bg-white border border-gray-300 rounded-full py-2 pl-4 pr-12 text-sm font-medium focus:outline-none focus:border-[#3087C5]"
               />
               <button
                 type="button"
+                onClick={() => setSearchQuery(searchInput.trim())}
                 className="absolute right-1 bg-[#3087C5] text-white p-2 rounded-full hover:bg-[#256fa4] transition-colors"
-                aria-label="Search button"
+                aria-label="Search notifications"
               >
                 <Search className="w-4 h-4" />
               </button>
@@ -186,14 +247,14 @@ export function NotificationsSection1() {
           </div>
 
           {/* Reset Filter prompt if searching or filtering */}
-          {(selectedCategory !== "All" || searchQuery) && (
+          {hasFilters && (
             <div className="flex items-center justify-between bg-white/40 px-4 py-2 rounded-xl text-xs font-bold text-gray-600">
-              <span>Showing filtered notifications ({filteredNotifications.length})</span>
+              <span>
+                Showing filtered notifications ({notifications.length})
+                {searchQuery && <span className="text-gray-500"> for “{searchQuery}”</span>}
+              </span>
               <button
-                onClick={() => {
-                  setSelectedCategory("All");
-                  setSearchQuery("");
-                }}
+                onClick={clearFilters}
                 className="text-[#3087C5] hover:underline flex items-center space-x-1"
               >
                 <span>Clear Filters</span>
@@ -202,32 +263,39 @@ export function NotificationsSection1() {
             </div>
           )}
 
-          {/* Notifications List */}
-          {filteredNotifications.length > 0 ? (
+          {/* Loading / Error / Empty / List */}
+          {isLoading && <ListSkeleton count={3} />}
+          {!isLoading && error && <ErrorBanner message={error} onRetry={() => void loadNotifications()} />}
+          {!isLoading && !error && notifications.length === 0 && (
+            <EmptyState
+              icon={<Bell className="w-12 h-12" />}
+              title="No notifications found"
+              description="Try checking another category or clearing your search."
+              action={
+                hasFilters ? (
+                  <button
+                    onClick={clearFilters}
+                    className="bg-[#3087C5] text-white text-xs font-bold px-4 py-2 rounded-full hover:bg-[#256fa4] transition-colors"
+                  >
+                    Reset View
+                  </button>
+                ) : undefined
+              }
+            />
+          )}
+          {!isLoading && !error && notifications.length > 0 && (
             <div className="space-y-3">
-              {filteredNotifications.map((notif) => (
-                <NotificationCard key={notif.id} notification={notif} />
+              {notifications.map((notification) => (
+                <NotificationCard
+                  key={notification.id}
+                  notification={notification}
+                  onMarkRead={(item) => void handleMarkRead(item)}
+                  markingRead={markingIds.includes(notification.id)}
+                />
               ))}
             </div>
-          ) : (
-            <div className="bg-white rounded-2xl p-12 text-center border border-gray-200 shadow-sm">
-              <Bell className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-              <h3 className="font-bold text-gray-800 text-lg mb-1">No notifications found</h3>
-              <p className="text-sm text-gray-500 mb-4">Try checking another category or clearing your search.</p>
-              <button
-                onClick={() => {
-                  setSelectedCategory("All");
-                  setSearchQuery("");
-                }}
-                className="bg-[#3087C5] text-white text-xs font-bold px-4 py-2 rounded-full hover:bg-[#256fa4] transition-colors"
-              >
-                Reset View
-              </button>
-            </div>
           )}
-
         </div>
-
       </div>
     </section>
   );

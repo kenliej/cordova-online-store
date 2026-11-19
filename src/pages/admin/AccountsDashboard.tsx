@@ -1,194 +1,388 @@
-import { useState } from "react";
-import { 
-  UserPlus, 
-  Users, 
-  HardHat, 
-  UserX, 
-  Search, 
-  CheckCircle2, 
-  XCircle, 
-  Eye, 
-  Plus, 
-  RotateCcw,
-  SlidersHorizontal,
-  ChevronUp,
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
   ChevronDown,
-  Edit
+  ChevronLeft,
+  ChevronRight,
+  ChevronUp,
+  HardHat,
+  Plus,
+  Search,
+  SlidersHorizontal,
+  UserPlus,
+  Users,
+  UserX,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-
+import { EmptyState, ErrorBanner, ListSkeleton } from "@/components/common/Feedback";
+import { useToast } from "@/components/common/Toast";
 import { ViewIdModal } from "@/components/ui/ViewIdModal";
 import { CustomerDetailsModal } from "@/components/ui/CustomerDetailsModal";
 import { WorkerDetailsModal } from "@/components/ui/WorkerDetailsModal";
-import { WorkerFormModal } from "@/components/ui/WorkerFormModal";
+import { WorkerFormModal, type WorkerFormValues } from "@/components/ui/WorkerFormModal";
+import { AccountCard, type AccountTab } from "@/pages/admin/AccountCard";
+import { api, getErrorMessage } from "@/lib/api";
+import type {
+  AdminAccountRow,
+  AdminIdDocuments,
+  AdminStore,
+  PaginationMeta,
+} from "@/lib/types";
 
-// --- Data Types ---
-export interface PendingAccount {
-  id: string;
-  name: string;
-  birthday: string;
-  gender: string;
-  address: string;
-  phone: string;
-  email: string;
-  profileImage: string;
-  idOneUrl?: string;
-  idTwoUrl?: string;
+/** Backwards-compatible aliases for the account view models. */
+export type PendingAccount = AdminAccountRow;
+export type CustomerAccount = AdminAccountRow;
+export type WorkerAccount = AdminAccountRow;
+
+const TAB_ORDER: AccountTab[] = ["pending", "customer", "worker", "removed"];
+
+const TABS = [
+  { key: "pending", name: "Pending Accounts", icon: UserPlus },
+  { key: "customer", name: "Customer Accounts", icon: Users },
+  { key: "worker", name: "Worker Accounts", icon: HardHat },
+  { key: "removed", name: "Removed Accounts", icon: UserX },
+] as const;
+
+const EMPTY_COUNTS: Record<AccountTab, number> = {
+  pending: 0,
+  customer: 0,
+  worker: 0,
+  removed: 0,
+};
+
+const PER_PAGE = 10;
+
+interface PagerProps {
+  meta: PaginationMeta | null;
+  page: number;
+  noun: string;
+  onPage: (page: number) => void;
 }
 
-export interface CustomerAccount extends PendingAccount {
-  customerId: string;
-  badRecords: number;
+function Pager({ meta, page, noun, onPage }: PagerProps) {
+  if (!meta || meta.lastPage <= 1) return null;
+  return (
+    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white/60 backdrop-blur-xs px-4 py-3 rounded-2xl border border-gray-300/60 shadow-xs">
+      <p className="text-xs font-bold text-gray-600">
+        Page {meta.currentPage} of {meta.lastPage} · {meta.total.toLocaleString()} {noun}
+      </p>
+      <div className="flex items-center gap-2">
+        <Button
+          variant="white"
+          size="sm"
+          onClick={() => onPage(page - 1)}
+          disabled={page <= 1}
+          className="rounded-full"
+        >
+          <ChevronLeft className="w-3.5 h-3.5" />
+          <span>Prev</span>
+        </Button>
+        <Button
+          variant="white"
+          size="sm"
+          onClick={() => onPage(page + 1)}
+          disabled={page >= meta.lastPage}
+          className="rounded-full"
+        >
+          <span>Next</span>
+          <ChevronRight className="w-3.5 h-3.5" />
+        </Button>
+      </div>
+    </div>
+  );
 }
-
-export interface WorkerAccount extends PendingAccount {
-  workerId: string;
-  password?: string;
-}
-
-export interface RemovedAccount {
-  id: string;
-  type: "Customer" | "Worker";
-  account: CustomerAccount | WorkerAccount;
-}
-
-// --- Initial Mock Data matching reference screenshots ---
-const INITIAL_PENDING: PendingAccount[] = [
-  { id: "p1", name: "Sherwynn James Misula", birthday: "09/11/1995", gender: "Real Men", address: "Korea", phone: "0911324567", email: "0911324567", profileImage: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=80" },
-  { id: "p2", name: "Shermaine Misula", birthday: "09/11/1995", gender: "Gender Neutral", address: "Korea", phone: "0911324567", email: "0911324567", profileImage: "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=500&auto=format&fit=crop&q=80" },
-];
-
-const INITIAL_CUSTOMERS: CustomerAccount[] = [
-  { id: "c1", customerId: "676767676767", name: "Sherwynn James Misula", birthday: "09/11/1995", gender: "Real Men", address: "Korea", phone: "098574641", email: "09/11/1995", profileImage: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=80", badRecords: 0 },
-  { id: "c2", customerId: "676767676767", name: "Shermaine James Misula", birthday: "09/11/1995", gender: "Gender Neutral", address: "Thailand", phone: "09879165454", email: "09/11/1995", profileImage: "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=500&auto=format&fit=crop&q=80", badRecords: 1 },
-  { id: "c3", customerId: "676767676767", name: "Sherwynn James Misula", birthday: "09/11/1995", gender: "Real Men", address: "Korea", phone: "098574641", email: "09/11/1995", profileImage: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=500&auto=format&fit=crop&q=80", badRecords: 2 },
-];
-
-const INITIAL_WORKERS: WorkerAccount[] = [
-  { id: "w1", workerId: "676767676767", name: "Sherwynn James Misula", birthday: "09/11/1995", gender: "Real Men", address: "Korea", phone: "098574641", email: "09/11/1995", password: "password123", profileImage: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=500&auto=format&fit=crop&q=80" },
-  { id: "w2", workerId: "676767676767", name: "Shermaine James Misula", birthday: "09/11/1995", gender: "Gender Neutral", address: "Thailand", phone: "09879165454", email: "09/11/1995", password: "workersecret", profileImage: "https://images.unsplash.com/photo-1580489944761-15a19d654956?w=500&auto=format&fit=crop&q=80" },
-];
-
-const INITIAL_REMOVED: RemovedAccount[] = [
-  { id: "r1", type: "Worker", account: { id: "w99", workerId: "676767676767", name: "Sherwynn James Misula", birthday: "09/11/1995", gender: "Real Men", address: "Korea", phone: "098574641", email: "09/11/1995", profileImage: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500&auto=format&fit=crop&q=80" } },
-  { id: "r2", type: "Customer", account: { id: "c99", customerId: "676767676767", name: "Shermaine James Misula", birthday: "09/11/1995", gender: "Gender Neutral", address: "Thailand", phone: "09879165454", email: "09/11/1995", badRecords: 2, profileImage: "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=500&auto=format&fit=crop&q=80" } },
-];
 
 export default function AccountsDashboard() {
-  const [activeTab, setActiveTab] = useState<"Pending" | "Customer" | "Worker" | "Removed">("Pending");
-  const [searchQuery, setSearchQuery] = useState("");
+  const toast = useToast();
+
+  const [activeTab, setActiveTab] = useState<AccountTab>("pending");
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+
+  const [rows, setRows] = useState<AdminAccountRow[]>([]);
+  const [meta, setMeta] = useState<PaginationMeta | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [counts, setCounts] = useState<Record<AccountTab, number>>(EMPTY_COUNTS);
+  const [actionId, setActionId] = useState<number | null>(null);
+  /** Guards against stale list responses when the tab/search/page changes fast. */
+  const requestId = useRef(0);
+
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
-  // States for lists
-  const [pendingList, setPendingList] = useState<PendingAccount[]>(INITIAL_PENDING);
-  const [customerList, setCustomerList] = useState<CustomerAccount[]>(INITIAL_CUSTOMERS);
-  const [workerList, setWorkerList] = useState<WorkerAccount[]>(INITIAL_WORKERS);
-  const [removedList, setRemovedList] = useState<RemovedAccount[]>(INITIAL_REMOVED);
+  // Modal state
+  const [idAccount, setIdAccount] = useState<AdminAccountRow | null>(null);
+  const [detailsAccount, setDetailsAccount] = useState<AdminAccountRow | null>(null);
+  const [workerFormOpen, setWorkerFormOpen] = useState(false);
+  const [workerToEdit, setWorkerToEdit] = useState<AdminAccountRow | null>(null);
+  const [stores, setStores] = useState<AdminStore[]>([]);
+  const [storesLoading, setStoresLoading] = useState(false);
 
-  // Modal States
-  const [viewIdAccount, setViewIdAccount] = useState<PendingAccount | null>(null);
-  const [selectedCustomer, setSelectedCustomer] = useState<CustomerAccount | null>(null);
-  const [selectedWorker, setSelectedWorker] = useState<WorkerAccount | null>(null);
-  const [workerFormModalOpen, setWorkerFormModalOpen] = useState(false);
-  const [workerToEdit, setWorkerToEdit] = useState<WorkerAccount | null>(null);
+  // ID documents shared by the View ID / Customer Details modals
+  const [documents, setDocuments] = useState<AdminIdDocuments | null>(null);
+  const [documentsLoading, setDocumentsLoading] = useState(false);
+  const [documentsError, setDocumentsError] = useState<string | null>(null);
+  const [documentsAccountId, setDocumentsAccountId] = useState<number | null>(null);
+  /** Guards against a slow ID-document response overwriting a newer request. */
+  const documentsRequestId = useRef(0);
 
-  // --- Handlers ---
-  const handleAcceptPending = (pending: PendingAccount) => {
-    setPendingList(pendingList.filter((p) => p.id !== pending.id));
-    const newCustomer: CustomerAccount = {
-      ...pending,
-      customerId: String(Date.now()),
-      badRecords: 0,
-    };
-    setCustomerList([newCustomer, ...customerList]);
+  /* ------------------------------------------------------------------ */
+  /* Data loading                                                       */
+  /* ------------------------------------------------------------------ */
+
+  const load = useCallback(async () => {
+    const request = ++requestId.current;
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await api.admin.accounts({
+        tab: activeTab,
+        search: search.trim() || undefined,
+        page,
+        perPage: PER_PAGE,
+      });
+      if (request !== requestId.current) return;
+      setRows(result.items);
+      setMeta(result.meta);
+    } catch (caught) {
+      if (request !== requestId.current) return;
+      setRows([]);
+      setMeta(null);
+      setError(getErrorMessage(caught));
+    } finally {
+      if (request === requestId.current) setLoading(false);
+    }
+  }, [activeTab, search, page]);
+
+  const loadCounts = useCallback(async () => {
+    const entries = await Promise.all(
+      TAB_ORDER.map(async (tab) => {
+        try {
+          const result = await api.admin.accounts({ tab, perPage: 1 });
+          return [tab, result.meta.total] as const;
+        } catch {
+          return [tab, 0] as const;
+        }
+      }),
+    );
+    setCounts(Object.fromEntries(entries) as Record<AccountTab, number>);
+  }, []);
+
+  const loadStores = useCallback(async () => {
+    setStoresLoading(true);
+    try {
+      const result = await api.admin.stores({ perPage: 50 });
+      setStores(result.items);
+    } catch {
+      setStores([]);
+    } finally {
+      setStoresLoading(false);
+    }
+  }, []);
+
+  const openDocuments = useCallback(async (account: AdminAccountRow) => {
+    const request = ++documentsRequestId.current;
+    setDocumentsAccountId(account.id);
+    setDocuments(null);
+    setDocumentsError(null);
+    setDocumentsLoading(true);
+    try {
+      const result = await api.admin.idDocuments(account.id);
+      if (request !== documentsRequestId.current) return;
+      setDocuments(result);
+    } catch (caught) {
+      if (request !== documentsRequestId.current) return;
+      setDocumentsError(getErrorMessage(caught));
+    } finally {
+      if (request === documentsRequestId.current) setDocumentsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  useEffect(() => {
+    void loadCounts();
+  }, [loadCounts]);
+
+  // Debounced search (350 ms) — resets to the first page.
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setSearch(searchInput.trim());
+      setPage(1);
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [searchInput]);
+
+  // Store names are shown in the worker form + worker/removed detail modals.
+  useEffect(() => {
+    void loadStores();
+  }, [loadStores]);
+
+  /* ------------------------------------------------------------------ */
+  /* Actions                                                            */
+  /* ------------------------------------------------------------------ */
+
+  const refresh = async () => {
+    await Promise.all([load(), loadCounts()]);
   };
 
-  const handleRejectPending = (id: string) => {
-    setPendingList(pendingList.filter((p) => p.id !== id));
-  };
-
-  const handleRemoveCustomer = (customer: CustomerAccount) => {
-    setCustomerList(customerList.filter((c) => c.id !== customer.id));
-    setRemovedList([{ id: String(Date.now()), type: "Customer", account: customer }, ...removedList]);
-  };
-
-  const handleRemoveWorker = (worker: WorkerAccount) => {
-    setWorkerList(workerList.filter((w) => w.id !== worker.id));
-    setRemovedList([{ id: String(Date.now()), type: "Worker", account: worker }, ...removedList]);
-  };
-
-  const handleUnremoveAccount = (item: RemovedAccount) => {
-    setRemovedList(removedList.filter((r) => r.id !== item.id));
-    if (item.type === "Customer") {
-      setCustomerList([item.account as CustomerAccount, ...customerList]);
-    } else {
-      setWorkerList([item.account as WorkerAccount, ...workerList]);
+  const runAction = async (
+    account: AdminAccountRow,
+    action: () => Promise<unknown>,
+    successMessage: string,
+  ) => {
+    setActionId(account.id);
+    try {
+      await action();
+      toast.success(successMessage);
+      await refresh();
+    } catch (caught) {
+      toast.error(getErrorMessage(caught));
+    } finally {
+      setActionId(null);
     }
   };
 
-  const handleSaveWorker = (workerData: Partial<WorkerAccount>) => {
+  const handleApprove = (account: AdminAccountRow) => {
+    void runAction(
+      account,
+      () => api.admin.approveAccount(account.id),
+      `${account.name}'s account has been approved.`,
+    );
+  };
+
+  const handleReject = (account: AdminAccountRow) => {
+    if (!window.confirm(`Reject ${account.name}'s registration?`)) return;
+    void runAction(
+      account,
+      () => api.admin.rejectAccount(account.id),
+      `${account.name}'s registration has been rejected.`,
+    );
+  };
+
+  const handleRemove = (account: AdminAccountRow) => {
+    const isBan = account.role === "customer" && account.badRecords >= 2;
+    const label = isBan ? "Ban" : "Remove";
+    const suffix = isBan
+      ? "They have 2 or more unclaimed orders and will be banned."
+      : "They will move to the Removed Accounts tab.";
+    if (!window.confirm(`${label} ${account.name}'s account? ${suffix}`)) return;
+    void runAction(
+      account,
+      () => api.admin.removeAccount(account.id, { ban: isBan }),
+      `${account.name} has been ${isBan ? "banned" : "removed"}.`,
+    );
+  };
+
+  const handleRestore = (account: AdminAccountRow) => {
+    void runAction(
+      account,
+      () => api.admin.restoreAccount(account.id),
+      `${account.name}'s account has been restored.`,
+    );
+  };
+
+  const handleWorkerSubmit = async (values: WorkerFormValues) => {
     if (workerToEdit) {
-      setWorkerList(workerList.map((w) => (w.id === workerToEdit.id ? ({ ...w, ...workerData } as WorkerAccount) : w)));
+      await api.admin.updateWorker(workerToEdit.id, values);
+      toast.success(`Worker "${values.name}" has been updated.`);
     } else {
-      const newWorker: WorkerAccount = {
-        id: String(Date.now()),
-        workerId: String(Date.now()),
-        name: workerData.name || "",
-        birthday: workerData.birthday || "",
-        gender: workerData.gender || "Real Men",
-        address: workerData.address || "",
-        phone: workerData.phone || "",
-        email: workerData.email || "",
-        password: workerData.password || "default123",
-        profileImage: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=500&auto=format&fit=crop&q=80",
-      };
-      setWorkerList([newWorker, ...workerList]);
+      await api.admin.createWorker(values);
+      toast.success(`Worker "${values.name}" has been created.`);
     }
+    setWorkerFormOpen(false);
     setWorkerToEdit(null);
+    await refresh();
   };
 
-  const tabs = [
-    { name: "Pending Accounts", key: "Pending", icon: UserPlus, count: pendingList.length },
-    { name: "Customer Accounts", key: "Customer", icon: Users, count: customerList.length },
-    { name: "Worker Accounts", key: "Worker", icon: HardHat, count: workerList.length },
-    { name: "Removed Accounts", key: "Removed", icon: UserX, count: removedList.length },
-  ];
+  const openCreateWorker = () => {
+    setWorkerToEdit(null);
+    setWorkerFormOpen(true);
+    if (stores.length === 0) void loadStores();
+  };
+
+  const openEditWorker = (account: AdminAccountRow) => {
+    setWorkerToEdit(account);
+    setWorkerFormOpen(true);
+    if (stores.length === 0) void loadStores();
+  };
+
+  const openViewId = (account: AdminAccountRow) => {
+    setIdAccount(account);
+    void openDocuments(account);
+  };
+
+  const openDetails = (account: AdminAccountRow) => {
+    setDetailsAccount(account);
+    if (account.role === "customer") void openDocuments(account);
+  };
+
+  const storeNameFor = (storeId: number | null): string | null => {
+    if (storeId === null) return null;
+    return stores.find((store) => store.id === storeId)?.name ?? null;
+  };
+
+  /* ------------------------------------------------------------------ */
+  /* Render helpers                                                     */
+  /* ------------------------------------------------------------------ */
+
+  const activeTabLabel = TABS.find((tab) => tab.key === activeTab)?.name ?? "Accounts";
+
+  const renderTabCount = (tab: AccountTab) => {
+    const value = counts[tab];
+    if (value === 0 && meta === null) return "(…)";
+    return `(${value.toLocaleString()})`;
+  };
 
   return (
     <section className="bg-[#EBE9E1] min-h-screen w-full py-10 px-4 sm:px-6 relative font-sans">
-      
       {/* Modals */}
-      <ViewIdModal 
-        isOpen={!!viewIdAccount} 
-        onClose={() => setViewIdAccount(null)} 
-        accountName={viewIdAccount?.name || ""} 
-      />
-      
-      <CustomerDetailsModal 
-        isOpen={!!selectedCustomer} 
-        onClose={() => setSelectedCustomer(null)} 
-        customer={selectedCustomer} 
-      />
-
-      <WorkerDetailsModal 
-        isOpen={!!selectedWorker} 
-        onClose={() => setSelectedWorker(null)} 
-        worker={selectedWorker} 
+      <ViewIdModal
+        isOpen={idAccount !== null}
+        onClose={() => setIdAccount(null)}
+        accountName={idAccount?.name ?? ""}
+        documents={documents}
+        loading={documentsLoading}
+        error={documentsError}
+        onRetry={() => {
+          if (idAccount) void openDocuments(idAccount);
+        }}
       />
 
-      <WorkerFormModal 
-        isOpen={workerFormModalOpen} 
-        onClose={() => { setWorkerFormModalOpen(false); setWorkerToEdit(null); }} 
-        workerToEdit={workerToEdit} 
-        onSave={handleSaveWorker} 
+      <CustomerDetailsModal
+        isOpen={detailsAccount !== null && detailsAccount.role !== "worker"}
+        onClose={() => setDetailsAccount(null)}
+        customer={detailsAccount}
+        documents={documentsAccountId === detailsAccount?.id ? documents : null}
+        documentsLoading={documentsLoading}
+      />
+
+      <WorkerDetailsModal
+        isOpen={detailsAccount !== null && detailsAccount.role === "worker"}
+        onClose={() => setDetailsAccount(null)}
+        worker={detailsAccount}
+        storeName={detailsAccount ? storeNameFor(detailsAccount.storeId) : null}
+      />
+
+      <WorkerFormModal
+        isOpen={workerFormOpen}
+        onClose={() => {
+          setWorkerFormOpen(false);
+          setWorkerToEdit(null);
+        }}
+        workerToEdit={workerToEdit}
+        stores={stores}
+        storesLoading={storesLoading}
+        onSubmit={handleWorkerSubmit}
       />
 
       <div className="max-w-7xl mx-auto flex flex-col lg:flex-row gap-8 items-start">
-        
-        {/* SIDEBAR NAVIGATION (#E3DFD3 background) */}
+        {/* SIDEBAR NAVIGATION */}
         <aside className="w-full lg:w-85 shrink-0 bg-[#E3DFD3] border border-gray-300/80 rounded-2xl p-5 shadow-sm space-y-6">
           <div>
-            <div 
+            <div
               className="flex items-center justify-between cursor-pointer pb-3"
               onClick={() => setIsSidebarOpen(!isSidebarOpen)}
             >
@@ -198,23 +392,26 @@ export default function AccountsDashboard() {
                 </div>
                 <h3 className="font-black text-gray-900 text-base">Accounts Center</h3>
               </div>
-              <button className="text-gray-600 hover:text-gray-900">
+              <button className="text-gray-600 hover:text-gray-900" aria-label="Toggle accounts navigation">
                 {isSidebarOpen ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
               </button>
             </div>
 
             {isSidebarOpen && (
               <div className="mt-2 space-y-0 border-t border-gray-300/60 overflow-hidden">
-                {tabs.map((tab) => {
+                {TABS.map((tab) => {
                   const Icon = tab.icon;
                   const isSelected = activeTab === tab.key;
                   return (
                     <button
                       key={tab.key}
-                      onClick={() => setActiveTab(tab.key as any)}
+                      onClick={() => {
+                        setActiveTab(tab.key);
+                        setPage(1);
+                      }}
                       className={`w-full flex items-center justify-between px-3.5 py-3 text-xs sm:text-sm font-bold transition-all rounded-none ${
-                        isSelected 
-                          ? "bg-white text-gray-900 border-l-4 border-[#3087C5] shadow-xs" 
+                        isSelected
+                          ? "bg-white text-gray-900 border-l-4 border-[#3087C5] shadow-xs"
                           : "bg-white/40 text-gray-700 hover:bg-white/70 border-l-4 border-transparent"
                       }`}
                     >
@@ -223,7 +420,7 @@ export default function AccountsDashboard() {
                         <span className="truncate text-left">{tab.name}</span>
                       </div>
                       <span className="text-xs font-semibold text-gray-500 bg-gray-200/60 px-2.5 py-0.5 rounded-full shrink-0">
-                        ({tab.count})
+                        {renderTabCount(tab.key)}
                       </span>
                     </button>
                   );
@@ -235,198 +432,104 @@ export default function AccountsDashboard() {
 
         {/* MAIN CONTENT AREA */}
         <div className="flex-1 w-full space-y-5">
-          
           {/* Header & Search Bar */}
           <div className="bg-white/60 backdrop-blur-xs p-4 rounded-2xl border border-gray-300/60 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4">
             <h2 className="text-lg font-black text-[#3087C5]">
-              {activeTab === "Pending" && `New Accounts: ${pendingList.length}`}
-              {activeTab === "Customer" && `Customer Accounts: ${customerList.length.toLocaleString()}`}
-              {activeTab === "Worker" && `Worker Accounts: ${workerList.length}`}
-              {activeTab === "Removed" && `Removed Accounts: ${removedList.length}`}
+              {activeTabLabel}: {counts[activeTab].toLocaleString()}
             </h2>
 
             <div className="flex items-center space-x-3 w-full sm:w-auto justify-end">
-              {/* Search Bar matching reference image[cite: 11, 12, 13, 14] */}
-              <div className="relative w-full sm:w-72 flex items-center">
+              <form
+                className="relative w-full sm:w-72 flex items-center"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  setSearch(searchInput.trim());
+                  setPage(1);
+                }}
+              >
                 <input
-                  type="text"
-                  placeholder="Search"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  type="search"
+                  placeholder="Search name, email, phone…"
+                  value={searchInput}
+                  onChange={(event) => setSearchInput(event.target.value)}
+                  aria-label="Search accounts"
                   className="w-full bg-white border border-gray-300 rounded-full py-2 pl-4 pr-10 text-sm font-medium focus:outline-none focus:border-[#3087C5]"
                 />
                 <button
-                  type="button"
-                  className="absolute right-1 bg-[#3087C5] text-white p-2 rounded-full hover:bg-[#256fa4]"
+                  type="submit"
+                  aria-label="Search accounts"
+                  className="absolute right-1 bg-[#3087C5] text-white p-2 rounded-full hover:bg-[#256fa4] cursor-pointer"
                 >
                   <Search className="w-4 h-4" />
                 </button>
-              </div>
+              </form>
 
-              {/* New Worker Button */}
-              {activeTab === "Worker" && (
+              {activeTab === "worker" && (
                 <Button
                   variant="primary"
                   size="md"
-                  onClick={() => { setWorkerToEdit(null); setWorkerFormModalOpen(true); }}
+                  onClick={openCreateWorker}
                   className="rounded-full shadow-md font-bold shrink-0"
                 >
-                  <Plus className="w-4 h-4 mr-1" />
+                  <Plus className="w-4 h-4" />
                   <span>New Worker</span>
                 </Button>
               )}
             </div>
           </div>
 
-          {/* TAB 1: PENDING ACCOUNTS[cite: 11] */}
-          {activeTab === "Pending" && (
+          {/* List */}
+          {loading ? (
+            <ListSkeleton count={3} />
+          ) : error ? (
+            <ErrorBanner message={error} onRetry={() => void load()} />
+          ) : rows.length === 0 ? (
+            <EmptyState
+              icon={<UserX className="w-10 h-10" />}
+              title={`No ${activeTabLabel.toLowerCase()}`}
+              description={
+                search
+                  ? `No accounts matched “${search}”. Try a different name, email, or phone number.`
+                  : "There is nothing to show in this tab yet."
+              }
+              action={
+                search ? (
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() => {
+                      setSearchInput("");
+                      setSearch("");
+                      setPage(1);
+                    }}
+                    className="rounded-full"
+                  >
+                    Clear Search
+                  </Button>
+                ) : undefined
+              }
+            />
+          ) : (
             <div className="space-y-4">
-              {pendingList.map((item) => (
-                <div key={item.id} className="bg-white border border-gray-200 rounded-3xl p-5 shadow-sm flex flex-col sm:flex-row items-start space-y-4 sm:space-y-0 sm:space-x-5">
-                  <div className="w-32 h-36 rounded-2xl overflow-hidden border border-gray-200 shrink-0">
-                    <img src={item.profileImage} alt={item.name} className="w-full h-full object-cover" />
-                  </div>
-                  <div className="flex-1 space-y-1 text-xs font-semibold text-gray-700">
-                    <p><span className="font-bold text-gray-900">Name:</span> <span className="text-[#3087C5] font-bold">{item.name}</span></p>
-                    <p><span className="font-bold text-gray-900">Birthday:</span> <span className="text-[#3087C5]">{item.birthday}</span></p>
-                    <p><span className="font-bold text-gray-900">Gender:</span> <span className="text-[#3087C5]">{item.gender}</span></p>
-                    <p><span className="font-bold text-gray-900">Address:</span> <span className="text-[#3087C5]">{item.address}</span></p>
-                    <p><span className="font-bold text-gray-900">Phone Number:</span> <span className="text-[#3087C5]">{item.phone}</span></p>
-                    <p><span className="font-bold text-gray-900">Email:</span> <span className="text-[#3087C5]">{item.email}</span></p>
-
-                    <div className="flex flex-wrap items-center gap-2 pt-3">
-                      <Button variant="gold" size="sm" onClick={() => handleAcceptPending(item)} className="rounded-full font-bold px-4">
-                        <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
-                        <span>Accept</span>
-                      </Button>
-                      <Button variant="primary" size="sm" onClick={() => setViewIdAccount(item)} className="rounded-full font-bold px-4">
-                        <Eye className="w-3.5 h-3.5 mr-1" />
-                        <span>View ID</span>
-                      </Button>
-                      <Button variant="white" size="sm" onClick={() => handleRejectPending(item.id)} className="rounded-full font-bold border-gray-300 px-4">
-                        <XCircle className="w-3.5 h-3.5 mr-1 text-gray-900" />
-                        <span className="text-gray-900">Reject</span>
-                      </Button>
-                    </div>
-                  </div>
-                </div>
+              {rows.map((account) => (
+                <AccountCard
+                  key={account.id}
+                  account={account}
+                  tab={activeTab}
+                  busy={actionId === account.id}
+                  onApprove={handleApprove}
+                  onReject={handleReject}
+                  onViewId={openViewId}
+                  onViewDetails={openDetails}
+                  onEdit={openEditWorker}
+                  onRemove={handleRemove}
+                  onRestore={handleRestore}
+                />
               ))}
+              <Pager meta={meta} page={page} noun="accounts" onPage={setPage} />
             </div>
           )}
-
-          {/* TAB 2: CUSTOMER ACCOUNTS[cite: 12] */}
-          {activeTab === "Customer" && (
-            <div className="space-y-4">
-              {customerList.map((item) => (
-                <div key={item.id} className="bg-white border border-gray-200 rounded-3xl p-5 shadow-sm flex flex-col sm:flex-row items-start space-y-4 sm:space-y-0 sm:space-x-5">
-                  <div className="w-32 h-36 rounded-2xl overflow-hidden border border-gray-200 shrink-0">
-                    <img src={item.profileImage} alt={item.name} className="w-full h-full object-cover" />
-                  </div>
-                  <div className="flex-1 space-y-1 text-xs font-semibold text-gray-700">
-                    <p><span className="font-bold text-gray-900">Customer ID:</span> <span className="text-[#3087C5] font-bold">{item.customerId}</span></p>
-                    <p><span className="font-bold text-gray-900">Name:</span> <span className="text-[#3087C5] font-bold">{item.name}</span></p>
-                    <p><span className="font-bold text-gray-900">Birthday:</span> <span className="text-[#3087C5]">{item.birthday}</span></p>
-                    <p><span className="font-bold text-gray-900">Gender:</span> <span className="text-[#3087C5]">{item.gender}</span></p>
-                    <p><span className="font-bold text-gray-900">Address:</span> <span className="text-[#3087C5]">{item.address}</span></p>
-                    <p><span className="font-bold text-gray-900">Phone Number:</span> <span className="text-[#3087C5]">{item.phone}</span></p>
-                    <p><span className="font-bold text-gray-900">Email:</span> <span className="text-[#3087C5]">{item.email}</span></p>
-
-                    <div className="flex flex-wrap items-center gap-2 pt-3">
-                      <Button variant="primary" size="sm" onClick={() => setSelectedCustomer(item)} className="rounded-full font-bold px-4">
-                        <Eye className="w-3.5 h-3.5 mr-1" />
-                        <span>View Details</span>
-                      </Button>
-                      <Button variant="white" size="sm" onClick={() => handleRemoveCustomer(item)} className="rounded-full font-bold border-gray-300 px-4">
-                        <XCircle className="w-3.5 h-3.5 mr-1 text-gray-900" />
-                        <span className="text-gray-900">{item.badRecords >= 2 ? "Ban Account" : "Remove Account"}</span>
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* TAB 3: WORKER ACCOUNTS[cite: 13] */}
-          {activeTab === "Worker" && (
-            <div className="space-y-4">
-              {workerList.map((item) => (
-                <div key={item.id} className="bg-white border border-gray-200 rounded-3xl p-5 shadow-sm flex flex-col sm:flex-row items-start space-y-4 sm:space-y-0 sm:space-x-5">
-                  <div className="w-32 h-36 rounded-2xl overflow-hidden border border-gray-200 shrink-0">
-                    <img src={item.profileImage} alt={item.name} className="w-full h-full object-cover" />
-                  </div>
-                  <div className="flex-1 space-y-1 text-xs font-semibold text-gray-700">
-                    <p><span className="font-bold text-gray-900">Worker ID:</span> <span className="text-[#3087C5] font-bold">{item.workerId}</span></p>
-                    <p><span className="font-bold text-gray-900">Name:</span> <span className="text-[#3087C5] font-bold">{item.name}</span></p>
-                    <p><span className="font-bold text-gray-900">Birthday:</span> <span className="text-[#3087C5]">{item.birthday}</span></p>
-                    <p><span className="font-bold text-gray-900">Gender:</span> <span className="text-[#3087C5]">{item.gender}</span></p>
-                    <p><span className="font-bold text-gray-900">Address:</span> <span className="text-[#3087C5]">{item.address}</span></p>
-                    <p><span className="font-bold text-gray-900">Phone Number:</span> <span className="text-[#3087C5]">{item.phone}</span></p>
-                    <p><span className="font-bold text-gray-900">Email:</span> <span className="text-[#3087C5]">{item.email}</span></p>
-
-                    <div className="flex flex-wrap items-center gap-2 pt-3">
-                      <Button variant="primary" size="sm" onClick={() => setSelectedWorker(item)} className="rounded-full font-bold px-4">
-                        <Eye className="w-3.5 h-3.5 mr-1" />
-                        <span>View Details</span>
-                      </Button>
-                      <Button variant="gold" size="sm" onClick={() => { setWorkerToEdit(item); setWorkerFormModalOpen(true); }} className="rounded-full font-bold px-4">
-                        <Edit className="w-3.5 h-3.5 mr-1" />
-                        <span>Edit</span>
-                      </Button>
-                      <Button variant="white" size="sm" onClick={() => handleRemoveWorker(item)} className="rounded-full font-bold border-gray-300 px-4">
-                        <XCircle className="w-3.5 h-3.5 mr-1 text-gray-900" />
-                        <span className="text-gray-900">Remove Account</span>
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* TAB 4: REMOVED ACCOUNTS[cite: 14] */}
-          {activeTab === "Removed" && (
-            <div className="space-y-4">
-              {removedList.map((item) => (
-                <div key={item.id} className="bg-white border border-gray-200 rounded-3xl p-5 shadow-sm flex flex-col sm:flex-row items-start space-y-4 sm:space-y-0 sm:space-x-5">
-                  <div className="w-32 h-36 rounded-2xl overflow-hidden border border-gray-200 shrink-0">
-                    <img src={item.account.profileImage} alt={item.account.name} className="w-full h-full object-cover" />
-                  </div>
-                  <div className="flex-1 space-y-1 text-xs font-semibold text-gray-700">
-                    <p><span className="font-bold text-gray-900">{item.type} ID:</span> <span className="text-[#3087C5] font-bold">676767676767</span></p>
-                    <p><span className="font-bold text-gray-900">Name:</span> <span className="text-[#3087C5] font-bold">{item.account.name}</span></p>
-                    <p><span className="font-bold text-gray-900">Birthday:</span> <span className="text-[#3087C5]">{item.account.birthday}</span></p>
-                    <p><span className="font-bold text-gray-900">Gender:</span> <span className="text-[#3087C5]">{item.account.gender}</span></p>
-                    <p><span className="font-bold text-gray-900">Address:</span> <span className="text-[#3087C5]">{item.account.address}</span></p>
-                    <p><span className="font-bold text-gray-900">Phone Number:</span> <span className="text-[#3087C5]">{item.account.phone}</span></p>
-                    <p><span className="font-bold text-gray-900">Email:</span> <span className="text-[#3087C5]">{item.account.email}</span></p>
-
-                    <div className="flex flex-wrap items-center gap-2 pt-3">
-                      <Button 
-                        variant="primary" 
-                        size="sm" 
-                        onClick={() => {
-                          if (item.type === "Customer") setSelectedCustomer(item.account as CustomerAccount);
-                          else setSelectedWorker(item.account as WorkerAccount);
-                        }} 
-                        className="rounded-full font-bold px-4"
-                      >
-                        <Eye className="w-3.5 h-3.5 mr-1" />
-                        <span>View Details</span>
-                      </Button>
-                      <Button variant="white" size="sm" onClick={() => handleUnremoveAccount(item)} className="rounded-full font-bold border-gray-300 px-4">
-                        <RotateCcw className="w-3.5 h-3.5 mr-1 text-gray-900" />
-                        <span className="text-gray-900">Unremoved</span>
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
         </div>
-
       </div>
     </section>
   );

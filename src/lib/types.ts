@@ -256,7 +256,7 @@ export interface CheckoutPayload {
 
 export interface OrderItem {
   id: number;
-  productId: number | null;
+  productId?: number | null;
   title: string;
   price: number;
   quantity: number;
@@ -267,12 +267,12 @@ export interface OrderRecord {
   /** Display identifier: the public `order_number`, falling back to the DB id. */
   id: string;
   /** Database id used by API calls (cancel / detail). */
-  dbId: number;
-  orderNumber: string | null;
+  dbId?: number;
+  orderNumber?: string | null;
   customerName?: string;
   customerPhone?: string;
   status: OrderStatus;
-  statusRaw: string;
+  statusRaw?: string;
   dateOrdered: string;
   dateReady?: string;
   claimDeadline?: string;
@@ -391,6 +391,8 @@ export interface AdminStore {
   category: string;
   description: string;
   operatingHours: string;
+  /** Alias kept for the legacy admin modal/table which calls it `time`. */
+  time: string;
   phone: string;
   isOpen: boolean;
   image: string;
@@ -456,6 +458,8 @@ export interface WorkerProduct {
   isNew: boolean;
   isActive: boolean;
   images: string[];
+  /** Server image ids + urls, used to remove individual saved images. */
+  imageRecords: { id: number; url: string }[];
   image: string;
   storeId: number | null;
 }
@@ -465,6 +469,7 @@ export interface WorkerProductQuery {
   search?: string;
   sort?: "price_asc" | "price_desc" | "newest";
   inStock?: boolean;
+  outOfStock?: boolean;
   page?: number;
   perPage?: number;
 }

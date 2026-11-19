@@ -78,6 +78,12 @@ class AppServiceProvider extends ServiceProvider
 
     private function configureUrls(): void
     {
+        // Generated absolute URLs (e.g. password-reset e-mails) must never be
+        // derived from the request Host header; pin them to APP_URL.
+        if ($rootUrl = config('app.url')) {
+            URL::forceRootUrl($rootUrl);
+        }
+
         if (config('app.force_https')) {
             URL::forceScheme('https');
         }

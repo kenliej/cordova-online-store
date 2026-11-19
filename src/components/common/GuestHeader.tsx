@@ -1,25 +1,19 @@
-import { useState, useEffect } from "react";
-import { Link, useLocation } from "react-router";
-import { 
-  Search, 
-  User, 
-  UserPlus, 
-  Home, 
-  Package, 
-  Store, 
-  Info, 
-  Mail,
-  Menu,
-  X
-} from "lucide-react";
+import { useEffect, useState, type FormEvent } from "react";
+import { Link, useLocation, useNavigate } from "react-router";
+import { Search, User, UserPlus, Home, Package, Store, Info, Mail, Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import logoImage from "@/assets/logo.webp";
 
+/**
+ * Header for unauthenticated visitors. Searching routes into the guest catalog.
+ */
 export function GuestHeader() {
   const location = useLocation();
+  const navigate = useNavigate();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isVisible, setIsVisible] = useState(true);
   const [lastScrollY, setLastScrollY] = useState(0);
+  const [searchQuery, setSearchQuery] = useState("");
 
   // Auto-hide header on scroll down / show on scroll up
   useEffect(() => {
@@ -31,7 +25,7 @@ export function GuestHeader() {
       } else if (currentScrollY > lastScrollY && currentScrollY > 80) {
         setIsVisible(false); // Scrolling DOWN -> hide header
       } else {
-        setIsVisible(true);  // Scrolling UP -> show header
+        setIsVisible(true); // Scrolling UP -> show header
       }
 
       setLastScrollY(currentScrollY);
@@ -47,12 +41,21 @@ export function GuestHeader() {
   }, [location.pathname]);
 
   const navLinks = [
-    { name: "Home", path: "/", icon: Home },
-    { name: "Products", path: "/products", icon: Package },
-    { name: "Stores", path: "/stores", icon: Store },
-    { name: "About", path: "/about", icon: Info },
-    { name: "Contact Us", path: "/contact", icon: Mail },
+    { name: "Home", path: "/guest/", icon: Home },
+    { name: "Products", path: "/guest/products", icon: Package },
+    { name: "Stores", path: "/guest/stores", icon: Store },
+    { name: "About", path: "/guest/about", icon: Info },
+    { name: "Contact Us", path: "/guest/contact", icon: Mail },
   ];
+
+  const handleSearch = (event: FormEvent) => {
+    event.preventDefault();
+    const query = searchQuery.trim();
+    navigate(query ? `/guest/products?search=${encodeURIComponent(query)}` : "/guest/products");
+  };
+
+  const isActive = (path: string) =>
+    path === "/guest/" ? location.pathname === "/guest/" || location.pathname === "/guest" : location.pathname === path;
 
   return (
     <>
@@ -64,40 +67,37 @@ export function GuestHeader() {
         {/* Top Bar (Cream Background) */}
         <div className="bg-[#FAF7E8] px-3 sm:px-4 py-2 sm:py-3 border-b border-amber-100">
           <div className="max-w-7xl mx-auto flex items-center justify-between gap-2 sm:gap-4">
-            
             {/* 1. Logo & Title (Text hidden on mobile, visible on md+) */}
-            <Link to="/" className="flex items-center space-x-2 shrink-0">
-              <img 
-                src={logoImage} 
-                alt="Online Mall Logo" 
-                className="w-10 h-10 sm:w-14 sm:h-14 object-contain" 
-              />
+            <Link to="/guest/" className="flex items-center space-x-2 shrink-0">
+              <img src={logoImage} alt="Online Mall Logo" className="w-10 h-10 sm:w-14 sm:h-14 object-contain" />
               <div className="hidden md:flex flex-col">
                 <span className="text-xl sm:text-2xl font-black tracking-tight text-sky-700 uppercase leading-none">
                   Online Mall
                 </span>
-                <span className="text-[10px] tracking-widest text-sky-600 font-bold uppercase mt-0.5">
-                  Cordova
-                </span>
+                <span className="text-[10px] tracking-widest text-sky-600 font-bold uppercase mt-0.5">Cordova</span>
               </div>
             </Link>
 
             {/* 2. Search Bar */}
-            <div className="flex-1 max-w-xl mx-1 sm:mx-4">
+            <form onSubmit={handleSearch} className="flex-1 max-w-xl mx-1 sm:mx-4" role="search">
               <div className="flex items-center rounded-full border border-gray-300 bg-white overflow-hidden shadow-inner focus-within:ring-2 focus-within:ring-sky-500">
                 <input
                   type="text"
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
                   placeholder="Search..."
+                  aria-label="Search products"
                   className="w-full px-3 sm:px-5 py-1.5 sm:py-2 text-xs sm:text-sm outline-none text-gray-700 placeholder-gray-400"
                 />
-                <button 
-                  type="button" 
+                <button
+                  type="submit"
+                  aria-label="Search"
                   className="bg-sky-600 hover:bg-sky-700 text-white px-3 sm:px-5 py-2 sm:py-2.5 flex items-center justify-center transition-colors"
                 >
                   <Search className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 </button>
               </div>
-            </div>
+            </form>
 
             {/* 3. Desktop Auth Buttons (Hidden on mobile, moved to side drawer) */}
             <div className="hidden md:flex items-center space-x-3 shrink-0">
@@ -118,7 +118,6 @@ export function GuestHeader() {
 
             {/* 4. Mobile Right Controls: [Hamburger Menu] */}
             <div className="flex items-center space-x-1 sm:space-x-2 shrink-0">
-              {/* Hamburger Toggle (Mobile Only) */}
               <button
                 type="button"
                 onClick={() => setIsMenuOpen(true)}
@@ -128,7 +127,6 @@ export function GuestHeader() {
                 <Menu className="w-6 h-6" />
               </button>
             </div>
-
           </div>
         </div>
 
@@ -138,14 +136,14 @@ export function GuestHeader() {
             <nav className="flex space-x-1 py-[0px]">
               {navLinks.map((link) => {
                 const Icon = link.icon;
-                const isActive = location.pathname === link.path;
+                const active = isActive(link.path);
 
                 return (
                   <Link
                     key={link.name}
                     to={link.path}
                     className={`flex items-center space-x-2 text-sm font-semibold px-4 py-2.5 transition-all ${
-                      isActive
+                      active
                         ? "bg-[#D4A328] text-white rounded-full shadow-inner"
                         : "text-white hover:bg-sky-700/50 rounded-md"
                     }`}
@@ -165,7 +163,7 @@ export function GuestHeader() {
 
       {/* Mobile Side Drawer Overlay */}
       {isMenuOpen && (
-        <div 
+        <div
           className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs md:hidden"
           onClick={() => setIsMenuOpen(false)}
         />
@@ -187,6 +185,7 @@ export function GuestHeader() {
             type="button"
             onClick={() => setIsMenuOpen(false)}
             className="text-white hover:bg-sky-600 p-1.5 rounded-full transition-colors"
+            aria-label="Close Navigation Menu"
           >
             <X className="w-6 h-6" />
           </button>
@@ -212,7 +211,7 @@ export function GuestHeader() {
         <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
           {navLinks.map((link) => {
             const Icon = link.icon;
-            const isActive = location.pathname === link.path;
+            const active = isActive(link.path);
 
             return (
               <Link
@@ -220,9 +219,7 @@ export function GuestHeader() {
                 to={link.path}
                 onClick={() => setIsMenuOpen(false)}
                 className={`flex items-center space-x-3 px-4 py-3 rounded-xl font-medium text-sm transition-all ${
-                  isActive
-                    ? "bg-[#D4A328] text-white font-bold shadow-md"
-                    : "text-white hover:bg-sky-600/60"
+                  active ? "bg-[#D4A328] text-white font-bold shadow-md" : "text-white hover:bg-sky-600/60"
                 }`}
               >
                 <Icon className="w-5 h-5" />

@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\UserRole;
 use App\Enums\UserStatus;
+use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -11,8 +12,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Laravel\Sanctum\HasApiTokens;
 
 /**
@@ -31,17 +34,17 @@ use Laravel\Sanctum\HasApiTokens;
  * @property string|null $customer_no
  * @property string|null $worker_no
  * @property string|null $gender
- * @property \Illuminate\Support\Carbon|null $birthday
+ * @property Carbon|null $birthday
  * @property string|null $address
  * @property string|null $profile_photo_path
  * @property int $bad_records
  * @property int|null $store_id
- * @property \Illuminate\Support\Carbon|null $last_login_at
- * @property \Illuminate\Support\Carbon|null $email_verified_at
+ * @property Carbon|null $last_login_at
+ * @property Carbon|null $email_verified_at
  */
 class User extends Authenticatable
 {
-    /** @use HasFactory<\Database\Factories\UserFactory> */
+    /** @use HasFactory<UserFactory> */
     use HasApiTokens, HasFactory, Notifiable;
 
     /**
@@ -266,6 +269,10 @@ class User extends Authenticatable
             ->delete();
 
         $this->tokens()->delete();
+
+        // Invalidate "remember me" cookies as well (defence in depth: a banned or
+        // removed account must not re-authenticate with a stale cookie).
+        $this->forceFill(['remember_token' => Str::random(60)])->saveQuietly();
     }
 
     /* ---------------------------------------------------------------------

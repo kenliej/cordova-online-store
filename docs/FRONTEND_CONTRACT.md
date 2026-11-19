@@ -248,7 +248,7 @@ Type source: `src/pages/admin/AccountsDashboard.tsx:26-42` (`PendingAccount` ext
 | `customerId` | `string` | `"676767676767"` (12 digits) | `AccountsDashboard.tsx:326`, `CustomerDetailsModal.tsx:26` | public customer number, displayed label **“Customer ID”**; minted client-side as `String(Date.now())` at `AccountsDashboard.tsx:100` → 13 digits, inconsistent length |
 | `name` | `string` | `"Sherwynn James Misula"` | `:327` | label “Name” |
 | `birthday` | `string` (mm/dd/yyyy) | `"09/11/1995"` | `:328`; `CustomerDetailsModal.tsx:53` | label “Birthday” |
-| `gender` | `string` | `"Real Men"`, `"Gender Neutral"`, `"Female"` | `:329`; select options `WorkerFormModal.tsx:156-158` | labels are non-standard; normalize in DB (`male`/`female`/`other`/`prefer_not_to_say`) with UI mapping |
+| `gender` | `string` | `"Real Men"`, `"Gender Neutral"`, `"Female"` | `:329`; select options `WorkerFormModal.tsx:156-158` | non-standard labels; **authoritative schema stores the UI strings verbatim** (`gender string(40)`, ARCH §4.1) — keep these values on the wire (§9.3) |
 | `address` | `string` | `"Korea"`, `"Thailand"` | `:330` | single-line free text |
 | `phone` | `string` | `"098574641"` | `:331` | label “Phone Number” |
 | `email` | `string` | mock bug: `"09/11/1995"` (a date, not an email) | `:332` | label “Email”; **mock data is invalid** |
@@ -1453,7 +1453,7 @@ plaintext), `worker_code` uniqueness.
 **`users`** (customers, workers, admins in one table)
 `id (bigint pk)`, `role enum('customer','worker','admin')`, `customer_id char(12) nullable unique` (display code),
 `worker_id char(12) nullable unique` (display code), `full_name`, `email` unique nullable, `phone` unique,
-`password`, `address`, `gender enum('male','female','other','prefer_not_to_say') nullable`,
+`password`, `address`, `gender string(40) nullable` (UI strings verbatim: “Real Men”, “Gender Neutral”, “Female”),
 `birthday date nullable`, `profile_photo_path nullable`,
 `status enum('pending','active','removed','banned','rejected')` default `pending` for customers / `active` for
 admin-created workers, `bad_records_count unsigned tinyint default 0`, `approved_at`, `approved_by_user_id`,
@@ -1580,6 +1580,11 @@ Actor column uses the roles from §1.1. JSON examples are written in camelCase *
 the **authoritative routes are `BACKEND_ARCHITECTURE.md` §5 (all under `/api`, no version segment)** and §9.6 maps
 each catalogue entry below to the real endpoint. Treat this catalogue as the **UI→operation inventory** (what the
 screen needs) and §9.6 + the architecture doc as the call signature.
+
+> **Money in the JSON examples below is illustrative only.** Some examples show centavos (e.g. `129900`) to make
+> arithmetic obvious; the **authoritative wire format is decimal pesos as a JSON number** (`1299.00`,
+> `DECIMAL(10,2)` — ARCH §2), formatted client-side with `formatPeso()` (§9.4). Field names in examples are the
+> UI-facing camelCase; real payload keys are snake_case (§9.2).
 
 #### A. Auth & session (8)
 
@@ -2088,33 +2093,40 @@ All seeders should be idempotent (`updateOrCreate` on natural keys: `slug`, `ema
 
 ### 7.8 Decisions the Lead/backend must confirm (blocking ambiguities)
 
-1. **Money representation** — integer centavos (recommended for correctness) vs decimal pesos; the transitional
-   `*Label` strings keep the current components rendering unchanged.
-2. **JSON casing** — camelCase (matches 100 % of current client code) vs snake_case (requires touching ~40
-   components). Recommend camelCase via API Resources.
-3. **ID strategy** — integer PKs + separate display codes (`customerId`, `workerId`, `orderCode`) vs ULIDs. Cart/order
-   handler signatures are numeric today (`CartCard.tsx:14-17`), so either return integers or update the TS types.
-4. **Role storage** — single `users` table with `role` (recommended) vs separate `customers`/`workers`/`admins`
-   tables. Pending registrations: `users.status=pending` vs a separate `registration_submissions` table
-   (recommended if ID-review data must be kept after rejection).
-5. **Multi-store carts** — cart currently has no store relation and an order has one implicit store. Split checkout
-   into one order per store (recommended) or block mixed carts; the UI has no store grouping today.
-6. **Auth screens missing** — decide: one `/login` with role-based redirect (recommended), or add
-   `/admin/login` + `/worker/login`. Worker/admin credentials: email or phone (same as customers)?
-7. **Exact enum strings** — keep `"Didn't Claimed"` (with typo) as the wire value for compatibility (recommended;
-   display-label mapping can come later) or rename to `"Did Not Claim"` / `didnt_claimed` keys and update the 10+
-   UI occurrences.
-8. **Gender values** — normalize (`male/female/other/prefer_not_to_say`) + `genderLabel` for the current labels, or
-   store the UI strings verbatim.
-9. **`price`/`stocks` field aliases** — catalog uses `stockCount` + string `price`; worker uses `stocks` + numeric
-   `price`. Decide one canonical set (`stockCount`, numeric `price`) and update worker components.
-10. **Claim policy timing** — is the 3-day timer from `ready_at` (recommended, per FAQ) and does the job run hourly?
-    Who is allowed to mark “Didn't Claimed” manually vs automatically?
-11. **Stock on order placement** — decrement at checkout (risk of abandoned orders) or at “Ready to Claim”? UI copy
-    implies stock visibility but not reservation semantics.
-12. **Contact message handling** — inbox screen is missing; confirm whether an admin screen is in scope.
-13. **Terms/Privacy content** — provide copy + routes or remove the links.
-14. **CAPTCHA** — real provider (reCAPTCHA/hCaptcha) vs honeypot; the UI is a fake checkbox.
+> **Status: resolved by `BACKEND_ARCHITECTURE.md`.** Items 1, 2, 3, 4, 6, 7, 8 and 9 are settled in ARCH and
+> reconciled in §9 (money = decimal-peso JSON number; JSON = snake_case; ids = integer + `*_no`/`order_number`
+> strings; single `users` table with `role` + `pending` status; one `/login` with role redirect; order statuses =
+> snake_case enum keys mapped to UI labels; gender stored verbatim; `stock`/`is_selected` canonical names).
+> Items 5, 10, 11, 12, 13 and 14 remain genuinely open and are re-listed with recommendations in §9.7.
+
+1. ~~**Money representation**~~ → resolved: JSON number, decimal pesos (`1299.00`), DB `DECIMAL(10,2)` (ARCH §2).
+2. ~~**JSON casing**~~ → resolved: snake_case everywhere; UI mapping layer (§9.2).
+3. ~~**ID strategy**~~ → resolved: integer internal ids; 12-digit `customer_no`/`worker_no` and `order_number` strings
+   exposed for display (ARCH §2/§4).
+4. ~~**Role storage**~~ → resolved: single `users` table with `role` enum + `status` enum; pending via
+   `status=pending` (ARCH §4.1).
+5. **Multi-store carts** — cart has no store relation in ARCH and `orders` has `pickup_location` but **no `store_id`**.
+   Either accept single-store/mall-wide orders (simplest, matches UI which shows no store) or extend the schema with
+   `store_id` + per-store checkout split.
+6. ~~**Auth screens missing**~~ → resolved in spirit: one `/login`, role-based redirect; admin/worker use the same
+   credentials form (email or phone). New routes `/reset-password` (+ `/logout`) are still frontend work (§9.1).
+7. ~~**Exact enum strings**~~ → resolved: wire values `pending|ready|claimed|cancelled|not_claimed`; UI keeps display
+   strings via mapping (§9.3).
+8. ~~**Gender values**~~ → resolved: stored as UI strings verbatim (ARCH `gender string(40)`).
+9. ~~**`price`/`stocks` aliases**~~ → resolved: catalog `stock` (int) rendered as `stockCount` through mapping; worker
+   form uses `stock`; price is numeric everywhere; UI formatting via `formatPeso`.
+10. **Claim policy timing** — ARCH fixes: `claim_deadline = ready_at + 3 days`, timestamps `ready_at`, `claimed_at`,
+    `cancelled_at`, `not_claimed_at`; a scheduled job must mark overdue `ready` orders as `not_claimed` (needs
+    confirmation that the scheduler runs it, and manual worker override remains allowed).
+11. **Stock on order placement** — ARCH §5/§6 says checkout decrements stock in a transaction and cancel/`not_claimed`
+    restores it (guard against double restore via status history). Confirmed by architecture; implementers must follow
+    it exactly.
+12. **Contact message handling** — ARCH exposes `GET/PATCH /api/admin/contact-messages` but the UI has **no inbox
+    screen**; decide whether frontend-admin builds it or it stays API-only for the demo.
+13. **Terms/Privacy content** — still missing (Register links to `/terms`, `/privacy`); provide copy + routes or
+    remove the links.
+14. **CAPTCHA** — ARCH uses a honeypot (`website` field) + 3/h throttle, **not** reCAPTCHA; the fake “I'm not a robot”
+    checkbox must be removed or kept purely visual (§9.7 #14).
 
 ---
 

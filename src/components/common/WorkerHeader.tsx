@@ -1,17 +1,13 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router";
-import { 
-  ClipboardList, 
-  Package, 
-  LogOut, 
-  Menu,
-  X
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { ClipboardList, Package, Menu, X } from "lucide-react";
+import { LogoutButton } from "@/components/common/LogoutButton";
+import { useAuth } from "@/context/AuthContext";
 import logoImage from "@/assets/logo.webp";
 
 export function WorkerHeader() {
   const location = useLocation();
+  const { user } = useAuth();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isVisible, setIsVisible] = useState(true);
   const [lastScrollY, setLastScrollY] = useState(0);
@@ -77,14 +73,10 @@ export function WorkerHeader() {
             {/* Spacer to push logout/menu to the right */}
             <div className="flex-1" />
 
-            {/* 2. Desktop Logout Button (Hidden on mobile, moved to side drawer) */}
-            <div className="hidden md:flex items-center shrink-0">
-              <Link to="/logout">
-                <Button variant="white" size="md" className="shadow-xs">
-                  <LogOut className="w-4 h-4 text-gray-700" />
-                  <span className="text-gray-900 font-medium">Logout</span>
-                </Button>
-              </Link>
+            {/* 2. Desktop user + Logout Button (Hidden on mobile, moved to side drawer) */}
+            <div className="hidden md:flex items-center space-x-3 shrink-0">
+              <span className="text-sm font-bold text-gray-700 max-w-[12rem] truncate">{user?.name}</span>
+              <LogoutButton variant="white" size="md" className="shadow-xs" />
             </div>
 
             {/* 3. Mobile Right Controls: [Hamburger Menu] */}
@@ -164,12 +156,13 @@ export function WorkerHeader() {
 
         {/* Logout Action in Drawer */}
         <div className="p-4 border-b border-sky-600/50 flex flex-col gap-2">
-          <Link to="/logout" onClick={() => setIsMenuOpen(false)}>
-            <Button variant="white" className="w-full justify-center">
-              <LogOut className="w-4 h-4 text-gray-700" />
-              <span className="text-gray-900">Logout</span>
-            </Button>
-          </Link>
+          <div className="flex items-center space-x-2 px-1">
+            <span className="w-8 h-8 rounded-full bg-[#D4A328] text-white text-xs font-black flex items-center justify-center">
+              {(user?.name ?? "W").charAt(0).toUpperCase()}
+            </span>
+            <p className="text-sm font-bold truncate">{user?.name}</p>
+          </div>
+          <LogoutButton variant="white" className="w-full justify-center" />
         </div>
 
         {/* Nav Links in Drawer */}

@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Str;
 
 /**
- * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\Store>
+ * @extends Factory<Store>
  */
 class StoreFactory extends Factory
 {
@@ -24,7 +24,7 @@ class StoreFactory extends Factory
         return [
             'name' => $name,
             'slug' => Str::slug($name).'-'.fake()->unique()->numberBetween(1, 999999),
-            'category_id' => Category::factory()->store(),
+            'category_id' => Category::factory()->storeCategory(),
             'description' => fake()->paragraph(),
             'operating_hours' => '6:00AM - 11:00PM',
             'phone' => '09'.fake()->numerify('#########'),
