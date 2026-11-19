@@ -15,7 +15,16 @@ Authoritative contract & DB schema: [`BACKEND_ARCHITECTURE.md`](BACKEND_ARCHITEC
 - Everything under `/api` is rate-limited to **120 req/min** per user (or per IP when
   anonymous); stricter limits apply per endpoint (noted below).
 
-## Authentication (Sanctum SPA cookies)
+## Authentication
+
+Two interchangeable modes, chosen by the frontend build:
+
+| Mode | When | Transport |
+|---|---|---|
+| **Cookie (Sanctum SPA)** | Same-origin (Docker/nginx, Vite proxy) | `POST /auth/login` + session cookie + CSRF |
+| **Bearer token** | Split origin (frontend on Vercel, API on cPanel) | `POST /auth/token` + `Authorization: Bearer <token>` |
+
+### Cookie mode (same origin)
 
 ```http
 GET  /sanctum/csrf-cookie          # sets XSRF-TOKEN cookie
@@ -25,10 +34,39 @@ POST /api/auth/logout              # 204
 ```
 
 Cookies are `HttpOnly`, encrypted and `SameSite=Lax` (`Secure` when served over HTTPS).
-No bearer token is exposed to the browser. Roles: `customer`, `worker`, `admin`.
 
-Login accepts `login` = email **or** phone. Blocked accounts return `403` with
-`code`: `account_pending` | `account_rejected` | `account_removed` | `account_banned`.
+### Token mode (cross-origin: Vercel → cPanel)
+
+```http
+POST /api/auth/token
+Content-Type: application/json
+{ "login": "customer@example.com", "password": "…", "remember": true, "device_name": "spa" }
+
+201/200 →
+{ "data": {
+    "token": "1|xxxxxxxx…",          // plain text, shown once
+    "token_type": "Bearer",
+    "expires_at": "2026-11-27T…",     // null when SANCTUM_EXPIRATION is empty
+    "abilities": ["role:customer"],
+    "user": { … }
+} }
+```
+
+Send `Authorization: Bearer 1|xxxxxxxx…` on every request. `POST /api/auth/logout`
+revokes the presented token; banning/removing a user revokes all of their tokens.
+Token lifetime is `SANCTUM_EXPIRATION` (minutes; recommended `10080` = 7 days).
+
+Both modes share the same role policies, throttling and endpoints. The SPA stores the
+token in `sessionStorage`, or `localStorage` when *Remember me* is checked; the Vercel
+CSP (`script-src 'self'`) mitigates XSS token theft.
+
+**CORS:** configure `CORS_ALLOWED_ORIGINS=https://<your-app>.vercel.app` (exact origin).
+The API also exposes `Retry-After` / `X-RateLimit-*` headers for rate-limit UX. See
+[`DEPLOYMENT-CPANEL-VERCEL.md`](DEPLOYMENT-CPANEL-VERCEL.md).
+
+Roles: `customer`, `worker`, `admin`. Login accepts `login` = email **or** phone.
+Blocked accounts return `403` with `code`: `account_pending` | `account_rejected` |
+`account_removed` | `account_banned`.
 
 ## Public
 
@@ -42,6 +80,7 @@ Login accepts `login` = email **or** phone. Blocked accounts return `403` with
 | GET | `/stores` | filters: `category`, `search`, `open=1`, `closed=1`, pagination |
 | GET | `/stores/{slug}` | detail + `images[]`, `highlights[]`, `products[]` |
 | POST | `/contact` | public message; honeypot field `website` must stay empty; **3/hour/IP** |
+| GET | `/storage/{path}` | public-disk image (jpg/jpeg/png/webp/gif/avif/ico); used when no static `/storage` symlink exists (cPanel); traversal/non-image blocked |
 
 ## Auth & profile
 
@@ -49,6 +88,7 @@ Login accepts `login` = email **or** phone. Blocked accounts return `403` with
 |---|---|---|---|
 | POST | `/auth/register` | — | multipart: `name,email,phone,address,birthday,gender?,password,password_confirmation,profile_photo?,id_front,id_back,agree_terms`; **10/hour/IP**; `201` pending (no session) |
 | POST | `/auth/login` | — | `{login,password,remember}`; **5/min** per identifier+IP |
+| POST | `/auth/token` | — | cross-origin Bearer-token login (same body + `device_name`); **5/min** |
 | POST | `/auth/logout` | any | ends session; `204` |
 | GET | `/auth/me` | any | user payload |
 | POST | `/auth/forgot-password` | — | `{email}`; always `200` (no account enumeration); sends Mailpit e-mail |

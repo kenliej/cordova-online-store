@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { FileWarning, ImageOff, Loader2, RefreshCw, ShieldCheck, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { fetchImageObjectUrl } from "@/lib/api";
 import type { AdminIdDocuments } from "@/lib/types";
 
 interface ViewIdModalProps {
@@ -20,22 +21,10 @@ const TYPE_LABELS: Record<string, string> = {
 };
 
 /**
- * The ID-document endpoints return absolute URLs. In dev the browser talks to
- * the Vite origin while Laravel lives on :8000, so an absolute cross-origin URL
- * would drop the SameSite session cookie. Render the same-origin path so the
- * dev proxy forwards the request with the Sanctum cookie attached.
+ * ID documents are private: each scan is downloaded through the API client
+ * (session cookie or Bearer token) and rendered from a temporary object URL.
+ * This works identically in the same-origin and Vercel/cPanel deployments.
  */
-function sameOriginPath(url: string): string {
-  if (!url) return "";
-  if (url.startsWith("/")) return url;
-  try {
-    const parsed = new URL(url, window.location.origin);
-    return `${parsed.pathname}${parsed.search}`;
-  } catch {
-    return url;
-  }
-}
-
 function IdDocumentPreview({
   label,
   url,
@@ -45,25 +34,56 @@ function IdDocumentPreview({
   url?: string;
   originalName?: string;
 }) {
-  const [failed, setFailed] = useState(false);
+  const [state, setState] = useState<{ status: "loading" | "ready" | "error"; objectUrl?: string }>({
+    status: url ? "loading" : "error",
+  });
+
+  useEffect(() => {
+    if (!url) {
+      setState({ status: "error" });
+      return;
+    }
+
+    let cancelled = false;
+    let objectUrl: string | null = null;
+    setState({ status: "loading" });
+
+    fetchImageObjectUrl(url)
+      .then((createdUrl) => {
+        if (cancelled) {
+          URL.revokeObjectURL(createdUrl);
+          return;
+        }
+        objectUrl = createdUrl;
+        setState({ status: "ready", objectUrl: createdUrl });
+      })
+      .catch(() => {
+        if (!cancelled) setState({ status: "error" });
+      });
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [url]);
 
   return (
     <div className="space-y-2 min-w-0">
       <span className="text-xs font-bold text-gray-700 block">{label}</span>
       <div className="h-48 rounded-2xl border border-gray-200 bg-gray-50 overflow-hidden flex items-center justify-center">
-        {url && !failed ? (
+        {url && state.status === "ready" && state.objectUrl ? (
           <img
-            src={sameOriginPath(url)}
+            src={state.objectUrl}
             alt={label}
             className="w-full h-full object-contain bg-white"
-            loading="lazy"
-            onError={() => setFailed(true)}
           />
+        ) : url && state.status === "loading" ? (
+          <Loader2 className="w-6 h-6 animate-spin text-[#3087C5]" />
         ) : (
           <div className="flex flex-col items-center gap-1.5 px-4 text-center text-gray-400">
             <ImageOff className="w-8 h-8" />
             <span className="text-[11px] font-bold">
-              {failed ? "This document could not be loaded." : "Document not uploaded."}
+              {url ? "This document could not be loaded." : "Document not uploaded."}
             </span>
           </div>
         )}

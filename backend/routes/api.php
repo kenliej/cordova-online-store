@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\Admin\WorkerController;
 use App\Http\Controllers\Api\Auth\AuthController;
 use App\Http\Controllers\Api\Auth\PasswordResetController;
 use App\Http\Controllers\Api\Auth\RegisterController;
+use App\Http\Controllers\Api\Auth\TokenController;
 use App\Http\Controllers\Api\CartController;
 use App\Http\Controllers\Api\CheckoutController;
 use App\Http\Controllers\Api\HealthController;
@@ -48,6 +49,8 @@ Route::post('/contact', [ContactController::class, 'store'])->middleware('thrott
 
 Route::post('/auth/register', RegisterController::class)->middleware('throttle:register');
 Route::post('/auth/login', [AuthController::class, 'login'])->middleware('throttle:login');
+// Bearer-token login for cross-origin SPAs (frontend on Vercel, API on cPanel).
+Route::post('/auth/token', [TokenController::class, 'store'])->middleware('throttle:login');
 Route::post('/auth/forgot-password', [PasswordResetController::class, 'sendResetLinkEmail'])
     ->middleware('throttle:forgot-password');
 Route::post('/auth/reset-password', [PasswordResetController::class, 'reset'])

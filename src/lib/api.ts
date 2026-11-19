@@ -142,12 +142,87 @@ export function getFieldErrors(error: unknown): Record<string, string> {
 /* Axios instance + interceptors                                      */
 /* ================================================================== */
 
-const BASE_URL = (import.meta.env.VITE_API_BASE as string | undefined)?.trim() || "/api";
+/**
+ * Two supported deployments:
+ *
+ * 1. Same-origin (Docker: nginx serves SPA + /api) — relative `/api` base URL,
+ *    Sanctum session cookies + CSRF.
+ * 2. Split deployment (Vercel frontend → cPanel `.../omc-backend/api`) — an
+ *    absolute API base URL. Cookies cannot be relied on cross-site, so auth
+ *    switches to Bearer tokens issued by `POST /auth/token`.
+ *
+ * `VITE_AUTH_MODE=cookie|token` overrides the automatic detection.
+ */
+const RAW_API_BASE = (
+  (import.meta.env.VITE_API_BASE_URL as string | undefined) ??
+  (import.meta.env.VITE_API_BASE as string | undefined)
+)?.trim();
+
+const BASE_URL = RAW_API_BASE || "/api";
+
+function isAbsoluteUrl(url: string): boolean {
+  return /^https?:\/\//i.test(url);
+}
+
+function sameOriginAsApp(url: string): boolean {
+  if (typeof window === "undefined" || !isAbsoluteUrl(url)) return true;
+  try {
+    return new URL(url).origin === window.location.origin;
+  } catch {
+    return false;
+  }
+}
+
+const AUTH_MODE_ENV = ((import.meta.env.VITE_AUTH_MODE as string | undefined) ?? "")
+  .trim()
+  .toLowerCase();
+
+/** True when the client talks to the API with Bearer tokens (cross-origin). */
+export const isTokenAuthMode: boolean =
+  AUTH_MODE_ENV === "token" ||
+  (AUTH_MODE_ENV !== "cookie" && isAbsoluteUrl(BASE_URL) && !sameOriginAsApp(BASE_URL));
+
+/** True when the client relies on Sanctum session cookies + CSRF. */
+export const isCookieAuthMode: boolean = !isTokenAuthMode;
+
+const TOKEN_STORAGE_KEY = "omc.auth.token";
+
+/**
+ * Reads the persisted bearer token. "Remember me" stores it in localStorage
+ * (survives tab close); otherwise it lives in sessionStorage only. Never store
+ * tokens in a cookie (no HttpOnly benefit in JS, and CORS/cookie pitfalls).
+ */
+export function getStoredToken(): string | null {
+  try {
+    return localStorage.getItem(TOKEN_STORAGE_KEY) ?? sessionStorage.getItem(TOKEN_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function setStoredToken(token: string | null, remember = false): void {
+  try {
+    localStorage.removeItem(TOKEN_STORAGE_KEY);
+    sessionStorage.removeItem(TOKEN_STORAGE_KEY);
+    if (token) {
+      (remember ? localStorage : sessionStorage).setItem(TOKEN_STORAGE_KEY, token);
+    }
+  } catch {
+    // Storage can be unavailable (private mode); the in-memory session still works
+    // until reload.
+  }
+}
+
+/** Removes any persisted bearer token (called on logout / 401). */
+export function clearStoredToken(): void {
+  setStoredToken(null);
+}
 
 export const http = axios.create({
   baseURL: BASE_URL,
-  withCredentials: true,
-  withXSRFToken: true,
+  // Session cookies only make sense in same-origin mode.
+  withCredentials: isCookieAuthMode,
+  withXSRFToken: isCookieAuthMode,
   headers: {
     Accept: "application/json",
     "X-Requested-With": "XMLHttpRequest",
@@ -156,8 +231,10 @@ export const http = axios.create({
 
 let csrfCookiePromise: Promise<void> | null = null;
 
-/** Fetches the Sanctum CSRF cookie (idempotent). */
+/** Fetches the Sanctum CSRF cookie (idempotent). No-op in token mode. */
 export function ensureCsrfCookie(force = false): Promise<void> {
+  if (isTokenAuthMode) return Promise.resolve();
+
   if (!csrfCookiePromise || force) {
     csrfCookiePromise = axios
       .get("/sanctum/csrf-cookie", { withCredentials: true })
@@ -186,6 +263,14 @@ export function setUnauthorizedHandler(handler: (() => void) | null): () => void
 const MUTATING_METHODS = new Set(["post", "put", "patch", "delete"]);
 
 http.interceptors.request.use(async (config) => {
+  if (isTokenAuthMode) {
+    const token = getStoredToken();
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  }
+
   const method = (config.method ?? "get").toLowerCase();
   if (MUTATING_METHODS.has(method)) {
     await ensureCsrfCookie();
@@ -274,8 +359,10 @@ http.interceptors.response.use(
       }
     }
 
-    if (status === 401 && unauthorizedHandler) {
-      unauthorizedHandler();
+    if (status === 401) {
+      // A rejected/expired bearer token must not keep being sent.
+      if (isTokenAuthMode) clearStoredToken();
+      if (unauthorizedHandler) unauthorizedHandler();
     }
 
     return Promise.reject(buildApiError(error));
@@ -903,21 +990,43 @@ function buildFormData(fields: Record<string, unknown>): FormData {
 /* ================================================================== */
 
 export async function login(payload: LoginPayload): Promise<AuthUser> {
+  const credentials = {
+    login: payload.login.trim(),
+    password: payload.password,
+    remember: payload.remember,
+  };
+
+  if (isTokenAuthMode) {
+    const body = await requestEnvelope({
+      method: "POST",
+      url: "/auth/token",
+      data: { ...credentials, device_name: "spa" },
+    });
+    const data = asRecord(body.data);
+    const token = toStr(data.token);
+    if (token === "") {
+      throw new ApiError("The server did not return an authentication token.", { status: 500 });
+    }
+    setStoredToken(token, Boolean(payload.remember));
+    return mapAuthUser(asRecord(data.user ?? data));
+  }
+
   const body = await requestEnvelope({
     method: "POST",
     url: "/auth/login",
-    data: {
-      login: payload.login.trim(),
-      password: payload.password,
-      remember: payload.remember,
-    },
+    data: credentials,
   });
   const data = asRecord(body.data);
   return mapAuthUser(data.user ?? data);
 }
 
 export async function logout(): Promise<void> {
-  await requestEnvelope({ method: "POST", url: "/auth/logout" });
+  try {
+    await requestEnvelope({ method: "POST", url: "/auth/logout" });
+  } finally {
+    // Local state must always be dropped, even if the network call failed.
+    clearStoredToken();
+  }
 }
 
 /** GET /auth/me — throws ApiError(401) when the session is not authenticated. */
@@ -1412,7 +1521,9 @@ export async function fetchIdDocuments(userId: number): Promise<AdminIdDocuments
       .filter((entry) => Object.keys(entry).length > 0)
       .map((entry) => ({
         type: toStr(entry.type),
-        url: mediaUrl(entry.download_url ?? entry.url ?? entry.path),
+        // Keep the absolute URL: protected images are fetched through axios
+        // (so they carry either the session cookie or the Bearer token).
+        url: toStr(entry.download_url ?? entry.url ?? entry.path),
         originalName: toStr(entry.original_name) || undefined,
         mime: toStr(entry.mime) || undefined,
         sizeBytes: toNumOrNull(entry.size_bytes) ?? undefined,
@@ -1594,6 +1705,24 @@ export async function updateContactMessage(
     url: `/admin/contact-messages/${messageId}`,
     data: { status },
   });
+}
+
+/* ================================================================== */
+/* Protected media                                                    */
+/* ================================================================== */
+
+/**
+ * Downloads a protected file (e.g. a government ID scan) through the axios
+ * client so the request carries the session cookie (same-origin mode) or the
+ * Authorization: Bearer header (split/Vercel mode). An <img src> cannot send a
+ * Bearer token, which is why the preview uses an object URL.
+ *
+ * The caller owns the returned object URL and must revoke it when unmounted.
+ */
+export async function fetchImageObjectUrl(url: string): Promise<string> {
+  if (!url) throw new ApiError("Missing image URL.", { status: 400 });
+  const response = await http.get(url, { responseType: "blob" });
+  return URL.createObjectURL(response.data as Blob);
 }
 
 /* ================================================================== */

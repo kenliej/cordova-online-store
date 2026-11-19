@@ -15,14 +15,15 @@ Full-stack "order online, pay & claim at the mall" application:
 2. [Architecture](#architecture)
 3. [Quick start — Docker (recommended)](#quick-start--docker-recommended)
 4. [Quick start — local development (no Docker)](#quick-start--local-development-no-docker)
-5. [Demo accounts](#demo-accounts)
-6. [API overview](#api-overview)
-7. [Database](#database)
-8. [Security controls](#security-controls)
-9. [Testing & verification](#testing--verification)
-10. [Operations](#operations)
-11. [Project layout](#project-layout)
-12. [Known limitations / notes](#known-limitations--notes)
+5. [Deploying to cPanel + Vercel (split origin)](#deploying-to-cpanel--vercel-split-origin)
+6. [Demo accounts](#demo-accounts)
+7. [API overview](#api-overview)
+8. [Database](#database)
+9. [Security controls](#security-controls)
+10. [Testing & verification](#testing--verification)
+11. [Operations](#operations)
+12. [Project layout](#project-layout)
+13. [Known limitations / notes](#known-limitations--notes)
 
 ---
 
@@ -188,6 +189,45 @@ cd backend && php artisan schedule:work
 
 ---
 
+## Deploying to cPanel + Vercel (split origin)
+
+The backend can run on shared cPanel hosting at `https://kjugarap.top/omc-backend`
+while the SPA is served by Vercel. Because browsers block cross-site cookies, that
+deployment uses **Bearer-token auth + CORS** instead of Sanctum cookies (the SPA switches
+automatically when `VITE_API_BASE_URL` is an absolute URL; same-origin Docker keeps using
+cookies).
+
+Everything needed is included:
+
+| What | Where |
+|---|---|
+| Step-by-step guide + troubleshooting | [`docs/DEPLOYMENT-CPANEL-VERCEL.md`](docs/DEPLOYMENT-CPANEL-VERCEL.md) |
+| cPanel web-root shim (`public_html/omc-backend/index.php`) + `.htaccess` | `deploy/cpanel/public_html/omc-backend/` |
+| Production `.env` template for cPanel | `deploy/cpanel/env.example` |
+| Cron entries (scheduler / optional queue) | `deploy/cpanel/cron.txt` |
+| Vercel project config (SPA rewrites, security headers, install command) | `vercel.json` |
+| Vercel build env template | `deploy/vercel/env.example` |
+| Local simulation of the `/omc-backend` subdirectory | `scripts/cpanel-subdir-sim.php` |
+
+Minimal version:
+
+1. Upload `backend/` to `/home/CPANEL_USER/omc-backend` (outside `public_html`), run
+   `composer install --no-dev --optimize-autoloader`.
+2. Copy the shim + `.htaccess` to `public_html/omc-backend/`, then create `.env` from
+   `deploy/cpanel/env.example` (`APP_URL=https://kjugarap.top/omc-backend`,
+   `APP_FRONTEND_URL=https://<vercel-app>`, `CORS_ALLOWED_ORIGINS=https://<vercel-app>`,
+   `SANCTUM_EXPIRATION=10080`), run `php artisan key:generate --force`,
+   `php artisan migrate --force`, `php artisan user:create-admin you@domain`, and add the
+   scheduler cron.
+3. On Vercel set `VITE_API_BASE_URL=https://kjugarap.top/omc-backend/api` and
+   `VITE_AUTH_MODE=token`, then deploy.
+
+The API also ships a token endpoint (`POST /api/auth/token`), a public media route
+(`/storage/...`) that works without symlinks, configurable CORS origins/patterns, and a
+`user:create-admin` command for production.
+
+---
+
 ## Demo accounts
 
 Seeded by `php artisan migrate --seed` / `db:seed`:
@@ -263,6 +303,9 @@ recheck):
 - **Transport/hosts** — `URL::forceRootUrl(APP_URL)` so generated links can never be
   poisoned via a spoofed Host header; `TRUSTED_HOSTS` allow-list enforced in production;
   trusted proxies configured; HSTS when HTTPS.
+- **Split-origin deployment** — optional Bearer-token auth (hashed at rest, role ability,
+  configurable TTL, revoked on logout/ban) with an exact CORS allow-list; token mode is
+  opt-in per frontend build (`VITE_AUTH_MODE=token`) and never exposed to cookie flows.
 - **Headers** — `X-Content-Type-Options`, `X-Frame-Options: DENY`, `Referrer-Policy`,
   `Permissions-Policy`, COOP/CORP, `Cache-Control: no-store` for API; nginx adds a CSP for
   the SPA and denies dotfiles/source maps.
@@ -344,16 +387,21 @@ the frontend build + `npm audit`, and builds the Docker images with a health smo
 │  ├─ context/AuthContext.tsx
 │  ├─ pages/{guest,customer,worker,admin}/
 │  └─ components/{common,features,ui}/
+├─ deploy/
+│  ├─ cpanel/{public_html/omc-backend/{index.php,.htaccess},env.example,cron.txt}
+│  └─ vercel/env.example
 ├─ docker/
 │  ├─ php/{Dockerfile,php.ini,entrypoint.sh}
 │  ├─ nginx/{Dockerfile,default.conf,security-headers.conf}
 │  └─ mysql/init/
 ├─ docs/
-│  ├─ BACKEND_ARCHITECTURE.md   API + DB + security contract
-│  ├─ FRONTEND_CONTRACT.md      UI inventory and mock data
-│  ├─ API.md                    endpoint reference
-│  └─ SECURITY_AUDIT.md         OWASP audit + recheck
-├─ scripts/smoke-test.ps1
+│  ├─ BACKEND_ARCHITECTURE.md       API + DB + security contract
+│  ├─ FRONTEND_CONTRACT.md          UI inventory and mock data
+│  ├─ API.md                        endpoint reference (cookie + token auth)
+│  ├─ DEPLOYMENT-CPANEL-VERCEL.md   split-origin deployment guide
+│  └─ SECURITY_AUDIT.md             OWASP audit + recheck
+├─ scripts/{smoke-test.ps1,cpanel-subdir-sim.php}
+├─ vercel.json                Vercel SPA rewrites + security headers
 ├─ docker-compose.yml
 ├─ .env.example
 └─ .github/workflows/ci.yml
@@ -376,6 +424,9 @@ the frontend build + `npm audit`, and builds the Docker images with a health smo
   `npm ci --legacy-peer-deps`). This is recorded in the audit.
 - **No online payments** — by design the app is "pay & claim at the mall"; orders carry
   `payment_method=pay_at_mall` and are marked paid when claimed.
+- **Split-origin token storage** — in the Vercel/cPanel deployment the SPA keeps its Bearer
+  token in `sessionStorage` (or `localStorage` with *Remember me*). The Vercel CSP
+  (`script-src 'self'`) is part of the mitigation; keep it when customising the frontend.
 - **The contact-form captcha is a UI affordance only**; server-side protection is the
   honeypot field + 3/hour/IP throttle. Integrate reCAPTCHA/hCaptcha server verification
   before exposing the form publicly.

@@ -412,3 +412,22 @@ npm audit --audit-level=low                           # 0 vulnerabilities
 | Upload validation | `app/Http/Requests/Auth/RegisterRequest.php:63-66`, `Profile/UpdateAvatarRequest.php:19-22`, `Catalog/ValidatesCatalogImages.php`, `Store/CreateStoreRequest.php:33`, `Product/CreateProductRequest.php:73-75` |
 | Audit logging | `app/Support/AuditLogger.php`; callers in admin/worker services/controllers |
 | Docker hardening | `docker/php/Dockerfile`, `docker/php/php.ini`, `docker/nginx/default.conf`, `docker/php/entrypoint.sh`, `docker-compose.yml` |
+
+---
+
+### Appendix B — Addendum: cross-origin deployment (cPanel API + Vercel SPA)
+
+The split-origin deployment added after the initial audit was reviewed against the same
+threat model. **No open findings.**
+
+| Area | Control / verification |
+|---|---|
+| Bearer tokens | `POST /api/auth/token` issues Sanctum personal access tokens; only the SHA-256 hash is stored (`personal_access_tokens.token`), plaintext is returned once. Role-scoped abilities; TTL from `SANCTUM_EXPIRATION`; revoked on logout (`PersonalAccessToken::delete`) and on remove/ban (`User::revokeSessions()`); pending/rejected/removed/banned accounts are refused before any token is issued. Covered by `tests/Feature/Auth/TokenAuthTest.php` (9 tests). |
+| Session/cookie mode unchanged | Token logout no longer breaks cookie logout (unconditional web-guard logout + conditional session invalidation); full pre-existing suite green (337 tests). |
+| CORS | Explicit origin allow-list (`CORS_ALLOWED_ORIGINS`), optional delimited PCRE patterns for previews, no wildcard with credentials, `supports_credentials` env-driven (`false` for token deployments), exposed `Retry-After`/`X-RateLimit-*`. Vercel origin must not be in `SANCTUM_STATEFUL_DOMAINS`, so cross-origin requests stay stateless and CSRF is not applicable. Covered by `tests/Feature/CorsTest.php` (allow, disallow, patterns, preflight). |
+| Host/scheme | `URL::forceRootUrl(APP_URL)` already prevented Host-header link poisoning; cPanel `APP_URL` includes the subdirectory and `TRUSTED_HOSTS` enforces the public domain in production. |
+| Storage/media route | New public `/storage/{path}` route (needed where no `public/storage` symlink exists) whitelists image extensions, rejects NUL/`..` and non-image files, resolves realpath under the public-disk root, sets `nosniff` + inline + cache headers. Covered by `tests/Feature/MediaRouteTest.php`. Private ID scans remain on the private disk, streamed only to owner/admin. |
+| ID-scan preview in SPA | `<img>` cannot send a Bearer token, so the admin modal downloads scans through the authenticated axios client as blobs (object URLs revoked on unmount); unauthenticated fetch returns 401 (runtime-verified). |
+| Admin provisioning | `user:create-admin` artisan command uses the global strong-password policy, never prints a stored password twice, and is safe for production (no demo seeding required). Tests in `tests/Feature/Console/CreateAdminCommandTest.php`. |
+| Frontend token storage | Token in `sessionStorage` (or `localStorage` only with “Remember me”), never in cookies; Vercel CSP `script-src 'self'` (no inline scripts) limits XSS surface; `VITE_AUTH_MODE=token` is opt-in per build. |
+| Deployment files | cPanel shim validates the app path and fails closed with a generic 500; `.htaccess` forwards `Authorization` to PHP-FPM (missing header would break auth), denies dotfiles/backups, disables indexes. `vercel.json` adds SPA rewrites + security headers (CSP, nosniff, frame-deny, referrer, permissions policy). |

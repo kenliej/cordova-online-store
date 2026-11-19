@@ -15,7 +15,10 @@ return [
         'local' => [
             'driver' => 'local',
             'root' => storage_path('app/private'),
-            'serve' => true,
+            // Framework-served signed URLs are not used; disabling this prevents
+            // Laravel's built-in `storage/{path}` routes from shadowing the
+            // public media route used by the cPanel subdirectory deployment.
+            'serve' => false,
             'throw' => false,
             'report' => false,
         ],

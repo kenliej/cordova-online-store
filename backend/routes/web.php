@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Web\MediaController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -10,6 +11,14 @@ Route::get('/', function () {
         'health' => url('/api/health'),
     ]);
 });
+
+/*
+| Public-disk uploads. In Docker nginx serves /storage/* directly; on shared
+| hosting (cPanel subdirectory install) this route keeps image URLs working.
+*/
+Route::get('/storage/{path}', MediaController::class)
+    ->where('path', '.*')
+    ->name('media.public');
 
 /*
 | Password-reset e-mails point at a frontend URL. The SPA owns the reset form;

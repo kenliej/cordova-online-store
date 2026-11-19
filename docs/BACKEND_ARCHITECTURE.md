@@ -37,15 +37,16 @@ Test DB: `online_mall_test`. Automated tests default to SQLite `:memory:` (phpun
 - Dates: ISO-8601 in JSON (`updated_at`), UI formats `m/d/Y`. Timezone `Asia/Manila`.
 - Money: JSON number (e.g. `1299.00`), DB `DECIMAL(10,2)`. Currency PHP (₱).
 - IDs: integers internally; expose numeric strings only for `customer_no` / `worker_no` / `order_number`.
-- All `/api/*` routes are prefixed. Public = no auth. Auth = Sanctum session cookie (`web` middleware group + `auth:sanctum`).
+- All `/api/*` routes are prefixed. Public = no auth. Auth = Sanctum (`auth:sanctum`) satisfied by either a session cookie (same-origin) or a Bearer token (split origin).
 - **Never trust client prices/stock/roles.** Always recompute from DB.
 - Roles: `admin`, `worker`, `customer`; statuses: `pending`, `active`, `rejected`, `removed`, `banned`.
 
-## 3. Authentication (Sanctum SPA cookies)
+## 3. Authentication (Sanctum SPA cookies, or Bearer tokens for split origin)
 
 - Dev: Vite proxies `/api`, `/sanctum`, `/storage` → `http://127.0.0.1:8000`, so browser sees one origin (no CORS).
 - Prod: nginx serves SPA + proxies `/api` etc. to php-fpm on the same origin (no CORS).
 - Flow: `GET /sanctum/csrf-cookie` → `POST /api/auth/login` → session cookie (HttpOnly, SameSite=Lax, Secure in prod) → `POST /api/auth/logout`.
+- **Split-origin deployments** (SPA on Vercel, API at `kjugarap.top/omc-backend`) use Bearer tokens: `POST /api/auth/token` issues a Sanctum personal access token (role ability, TTL from `SANCTUM_EXPIRATION`, revoked on logout/ban); clients send `Authorization: Bearer <token>`. List the Vercel origin in `CORS_ALLOWED_ORIGINS` and keep it OUT of `SANCTUM_STATEFUL_DOMAINS` so those requests stay stateless. See `docs/DEPLOYMENT-CPANEL-VERCEL.md`.
 - `GET /api/auth/me` returns the authenticated user or 401.
 - Login accepts `login` = email **or** phone. Throttle: 5 attempts/minute per login+IP; lockout response 429.
 - Registration creates `status=pending` customer + 1-2 private ID images. Pending users **cannot log in** (403, `code=account_pending`). Admin approves → `active`, `customer_no` generated (12-digit numeric string).
@@ -116,6 +117,7 @@ Legend: 🔓 public · 👤 any auth · 🧑 customer · 🛠 worker · 👑 adm
 |---|---|---|---|
 | POST | `/auth/register` | 🔓 | multipart: name,email,phone,address,birthday,gender?,password,password_confirmation,profile_photo?,id_front,id_back,agree_terms(bool). throt. 10/h. 201 → `{data:{message}}`, status pending |
 | POST | `/auth/login` | 🔓 | `{login,password,remember}`; 403 codes: account_pending/account_removed/account_banned; 422 invalid |
+| POST | `/auth/token` | 🔓 | Bearer-token login for cross-origin SPAs: same body + optional `device_name`; returns `{token,token_type,expires_at,abilities,user}`; token revoked on logout/ban; throttled like login |
 | POST | `/auth/logout` | 👤 | 204 |
 | GET | `/auth/me` | 👤 | user payload |
 | POST | `/auth/forgot-password` | 🔓 | `{email}` always 200 |

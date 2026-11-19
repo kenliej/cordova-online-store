@@ -11,6 +11,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Auth;
+use Laravel\Sanctum\PersonalAccessToken;
 
 /**
  * Sanctum SPA (cookie) authentication: login accepts email OR phone, blocks
@@ -48,6 +49,14 @@ class AuthController extends Controller
             AuditLogger::log('auth.logout', $user);
         }
 
+        // Bearer-token clients (cross-origin deployment): revoke the presented token.
+        $accessToken = $user?->currentAccessToken();
+        if ($accessToken instanceof PersonalAccessToken) {
+            $accessToken->delete();
+        }
+
+        // Clear the in-memory web guard for cookie clients; the framework tests
+        // and stateless requests may not have a started session.
         Auth::guard('web')->logout();
 
         if ($request->hasSession()) {
