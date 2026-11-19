@@ -1,0 +1,45 @@
+# Keep the Docker build context small and free of secrets/local state.
+.git
+.github
+.idea
+.vscode
+
+# Node / frontend build artefacts
+node_modules
+dist
+npm-debug.log*
+pnpm-debug.log*
+
+# Composer vendor directory is rebuilt inside the image
+backend/vendor
+backend/node_modules
+
+# Never bake local secrets or local databases into an image
+.env
+.env.*
+!env.example
+backend/.env
+backend/.env.*
+!backend/.env.example
+backend/database/*.sqlite
+backend/database/*.sqlite-journal
+
+# Local runtime state / uploads / logs
+backend/storage
+backend/bootstrap/cache/*.php
+backend/.phpunit.result.cache
+backend/.phpunit.cache
+
+# Tests and tooling are not needed at runtime
+backend/tests
+backend/phpunit.xml
+backend/.editorconfig
+backend/.gitignore
+backend/.gitattributes
+
+# Docs and compose metadata
+docs
+README.md
+*.md
+docker-compose*.yml
+.env.example

@@ -1,0 +1,14 @@
+vendor
+node_modules
+.env
+.env.*
+!.env.example
+storage
+tests
+phpunit.xml
+.phpunit.result.cache
+.phpunit.cache
+.editorconfig
+.gitignore
+.gitattributes
+database/*.sqlite
