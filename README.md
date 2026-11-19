@@ -213,6 +213,10 @@ Minimal version:
 
 1. Upload `backend/` to `/home/CPANEL_USER/omc-backend` (outside `public_html`), run
    `composer install --no-dev --optimize-autoloader`.
+   **No Composer on cPanel?** Build the upload package locally instead:
+   `powershell -ExecutionPolicy Bypass -File scripts/package-cpanel.ps1`
+   (`./scripts/package-cpanel.sh` on macOS/Linux) → `dist-cpanel/omc-backend.zip`,
+   then upload + extract it in cPanel File Manager; `vendor/` is already included.
 2. Copy the shim + `.htaccess` to `public_html/omc-backend/`, then create `.env` from
    `deploy/cpanel/env.example` (`APP_URL=https://kjugarap.top/omc-backend`,
    `APP_FRONTEND_URL=https://<vercel-app>`, `CORS_ALLOWED_ORIGINS=https://<vercel-app>`,

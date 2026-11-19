@@ -58,26 +58,75 @@ executed, through the shim.
 
 ### 2.2 Upload the application
 
-Option A — SSH/Terminal (recommended):
+Choose **one** of these three options. If cPanel Terminal says
+`composer: command not found` (very common on shared hosting), use Option A or B —
+you don't need Composer on the server at all.
+
+#### Option A — build the package on your computer (recommended, no server Composer)
+
+This repository includes a packaging script that runs `composer install --no-dev`
+locally and produces a zip/tar.gz with `vendor/` already inside:
+
+```powershell
+# Windows (from the repo root)
+powershell -ExecutionPolicy Bypass -File scripts/package-cpanel.ps1
+```
 
 ```bash
-cd /home/CPANEL_USER
-# upload/checkout the repo somewhere, then copy the backend:
-cp -a /home/CPANEL_USER/repo/backend /home/CPANEL_USER/omc-backend
+# macOS / Linux (from the repo root)
+./scripts/package-cpanel.sh
+```
+
+Output: `dist-cpanel/omc-backend.zip` (~8 MB, plus `.tar.gz`). Then in cPanel
+*File Manager*:
+
+1. Upload `omc-backend.zip` to `/home/CPANEL_USER/`.
+2. Select it → **Extract** → this creates `/home/CPANEL_USER/omc-backend/` with
+   `vendor/` inside.
+
+The package contains production dependencies only (no tests/dev packages) and no local
+`.env`, `.phpunit` cache, SQLite file or uploads/logs.
+
+#### Option B — install Composer in your cPanel home directory (no root needed)
+
+```bash
+# 1. Find the PHP CLI binary (cPanel often hides it from PATH)
+command -v php || ls /opt/cpanel/ea-php*/root/usr/bin/php
+
+# 2. Download Composer into ~/bin (pick the php path printed above)
+mkdir -p "$HOME/bin"
+export PHP_BIN="$(command -v php || ls /opt/cpanel/ea-php82/root/usr/bin/php | head -1)"
+"$PHP_BIN" -r "copy('https://getcomposer.org/installer', 'composer-setup.php');"
+"$PHP_BIN" composer-setup.php --install-dir="$HOME/bin" --filename=composer
+rm -f composer-setup.php
+"$PHP_BIN" "$HOME/bin/composer" --version
+
+# 3. Install dependencies (from the Laravel project directory)
 cd /home/CPANEL_USER/omc-backend
-composer install --no-dev --optimize-autoloader --no-interaction
-cp deploy...   # see next step
+"$PHP_BIN" "$HOME/bin/composer" install --no-dev --optimize-autoloader --no-interaction
+# if memory-limited:
+# "$PHP_BIN" -d memory_limit=512M "$HOME/bin/composer" install --no-dev --optimize-autoloader --no-interaction
 ```
 
-Option B — no shell: on your computer run
+No `export PATH` needed if you call `"$PHP_BIN" "$HOME/bin/composer"` directly.
+To make `composer` a normal command for the session: `export PATH="$HOME/bin:$PATH"`.
+
+#### Option C — the host already has Composer somewhere
 
 ```bash
-cd backend
-composer install --no-dev --optimize-autoloader
+ls -l /usr/local/bin/composer /usr/bin/composer /opt/cpanel/composer/bin/composer "$HOME/bin/composer" 2>/dev/null
+find / -maxdepth 5 -name 'composer*' -type f 2>/dev/null | head
+# example fallback:
+/opt/cpanel/composer/bin/composer --version
+/opt/cpanel/composer/bin/composer install --no-dev --optimize-autoloader --no-interaction
 ```
 
-then zip the `backend/` folder **including `vendor/`** (exclude `node_modules`, `tests`),
-upload it via cPanel *File Manager*, and extract to `/home/CPANEL_USER/omc-backend`.
+#### Option D — upload manually (if you have neither shell nor Composer)
+
+On your computer run `composer install --no-dev --optimize-autoloader` inside `backend/`,
+then upload the whole `backend/` folder **including `vendor/`** (exclude
+`node_modules`, `tests`, `.env`) and extract it to `/home/CPANEL_USER/omc-backend`.
+Option A automates exactly this.
 
 ### 2.3 Add the web-root shim
 
@@ -251,6 +300,9 @@ Vercel: push to the connected branch (or `vercel --prod`). Keep
 
 | Symptom | Cause / fix |
 |---|---|
+| `bash: composer: command not found` | Composer is not on the cPanel PATH. Use Option A in §2.2 (package locally with `scripts/package-cpanel.ps1`/`.sh`), or install it into `~/bin` with the PHP CLI (Option B). |
+| `bash: php: command not found` | cPanel hides PHP CLI from PATH. Use the EA-PHP path, e.g. `/opt/cpanel/ea-php82/root/usr/bin/php`, or select PHP 8.2 in *MultiPHP Manager*. Run artisan as `"$PHP_BIN" artisan …`. |
+| Composer memory error / killed | Run with `"$PHP_BIN" -d memory_limit=512M "$HOME/bin/composer" install …`; if it still fails, package locally (Option A). |
 | `404` on every `/omc-backend/api/*` | `.htaccess` missing, `RewriteBase` wrong, or shim path wrong (`index.php` → `$appPublicIndex`). Check `public_html/omc-backend/index.php` exists. |
 | `500` "app key" / blank page | `APP_KEY` empty → `php artisan key:generate --force`; storage/bootstrap-cache not writable → `chmod -R 775 storage bootstrap/cache`. |
 | 401 on everything even after login | `Authorization` header stripped by PHP-FPM → the `RewriteCond %{HTTP:Authorization}` block is missing from `.htaccess`; also confirm the Vercel client uses `VITE_AUTH_MODE=token`. |
