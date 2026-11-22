@@ -184,6 +184,27 @@ services:
     security_opt:
       - no-new-privileges:true
 
+  # Optional database web UI (Adminer): npm run docker:db-ui
+  # http://127.0.0.1:8081  server: db  user: onlinemall  DB: online_mall
+  # Password: DB_PASSWORD from .env. Bound to localhost only.
+  adminer:
+    image: adminer:4
+    container_name: onlinemall-adminer
+    restart: unless-stopped
+    profiles: ["tools"]
+    ports:
+      - "127.0.0.1:${ADMINER_PORT:-8081}:8080"
+    environment:
+      ADMINER_DEFAULT_SERVER: db
+      ADMINER_DESIGN: nette
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - onlinemall
+    security_opt:
+      - no-new-privileges:true
+
 networks:
   onlinemall:
     driver: bridge

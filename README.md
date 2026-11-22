@@ -140,6 +140,11 @@ Open:
 | http://localhost:8080/api/health | API health (DB connectivity) |
 | http://localhost:8025 | Mailpit — password-reset e-mails |
 | http://localhost:8080/admin/accounts | Admin area (after logging in as admin) |
+| http://127.0.0.1:8025 | Mailpit — password-reset e-mails |
+| http://127.0.0.1:8081/?pgsql=db | Database web UI (Adminer) — start with `npm run docker:db-ui` |
+
+Database UI login: System **PostgreSQL**, Server `db`, User `onlinemall`,
+Password = `DB_PASSWORD` from `.env`, Database `online_mall`.
 
 Migrations run automatically on app start. The database is on the named volume
 `db_data`; uploads live on `app_storage` (shared by nginx and php-fpm).

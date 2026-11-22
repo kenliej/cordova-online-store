@@ -10,6 +10,8 @@
     "docker:down": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/docker-up.ps1 -Down",
     "docker:reset": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/docker-up.ps1 -Reset",
     "docker:logs": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/docker-up.ps1 -Logs",
+    "docker:db-ui": "docker compose --profile tools up -d adminer",
+    "docker:db-ui:stop": "docker compose --profile tools stop adminer",
     "build": "tsc -b && vite build",
     "build:cpanel": "tsc -b && vite build --mode cpanel --outDir dist-cpanel-frontend --emptyOutDir",
     "build:local-split": "tsc -b && vite build --mode cpanellocal --outDir dist-e2e-split --emptyOutDir",

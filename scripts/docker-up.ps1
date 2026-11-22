@@ -261,6 +261,7 @@ Write-Host "  ============================================================" -For
 Write-Host "   App          : http://localhost:$webPort" -ForegroundColor Cyan
 Write-Host "   API health   : http://localhost:$webPort/api/health" -ForegroundColor Cyan
 Write-Host "   Mailpit      : http://127.0.0.1:$mailpitPort (password-reset e-mails)" -ForegroundColor Cyan
+Write-Host "   Database UI  : npm run docker:db-ui  ->  http://127.0.0.1:8081/?pgsql=db" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "   Demo accounts"
 Write-Host "     admin    : admin@onlinemall.test    / Admin#2026Secure"

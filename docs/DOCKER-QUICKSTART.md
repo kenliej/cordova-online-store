@@ -151,6 +151,33 @@ PostgreSQL and runs `php artisan migrate --force` on every start.
 - Only the app containers can reach the database; port 5432 is **not** exposed to
   your computer (safer by default).
 
+### Browse the database in your browser (Adminer - easiest)
+
+A web UI is included as an optional container (it does not start with the normal stack):
+
+```powershell
+npm run docker:db-ui
+```
+
+Open **http://127.0.0.1:8081/?pgsql=db** (the link preselects PostgreSQL and the server).
+
+| Login field | Value |
+|---|---|
+| System | PostgreSQL (preselected) |
+| Server | `db` |
+| Username | `onlinemall` |
+| Password | `DB_PASSWORD` from `.env` (`Get-Content .env \| Select-String '^DB_PASSWORD='`) |
+| Database | `online_mall` |
+
+Then use the left sidebar to browse tables (`users`, `products`, `orders`, ...), run
+SQL, edit rows, import/export and view schemas. The UI is bound to `127.0.0.1` only.
+
+Stop it when you are done:
+
+```powershell
+npm run docker:db-ui:stop
+```
+
 ### Open a SQL shell
 
 ```powershell

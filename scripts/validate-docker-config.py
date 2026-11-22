@@ -59,6 +59,11 @@ check("POSTGRES_PASSWORD comes from the environment", "POSTGRES_PASSWORD" in db_
 check("POSTGRES_DB + POSTGRES_USER configured", "POSTGRES_DB" in db_env and "POSTGRES_USER" in db_env)
 check("database volume is the PostgreSQL data dir", "/var/lib/postgresql/data" in str(db.get("volumes", "")))
 
+adminer = services.get("adminer", {}) if isinstance(services, dict) else {}
+check("optional database UI is Adminer", "adminer:4" in str(adminer.get("image", "")))
+check("database UI is bound to localhost only", any("127.0.0.1:" in str(port) for port in adminer.get("ports", [])))
+check("database UI requires the tools profile", "tools" in str(adminer.get("profiles", "")))
+
 app_env = str((services.get("app", {}) or {}).get("environment", ""))
 app_env_map = (services.get("app", {}) or {}).get("environment", {}) or {}
 check("APP_DEBUG=false in the app container", "APP_DEBUG" in app_env and "${APP_DEBUG:-false}" in app_env)
