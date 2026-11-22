@@ -105,14 +105,35 @@ function Get-PhpBase64Key {
     return ""
 }
 
+# Runs the docker CLI safely. Docker writes progress/build output to stderr;
+# PowerShell 5.1 with ErrorActionPreference=Stop turns any stderr line into a
+# terminating NativeCommandError, which would abort this script mid-build.
+function Invoke-DockerCli {
+    param(
+        [Parameter(Mandatory = $true)][string[]]$Arguments,
+        [switch]$SuppressOutput
+    )
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        if ($SuppressOutput) {
+            & docker @Arguments 2>&1 | Out-Null
+        } else {
+            & docker @Arguments 2>&1 | Out-Host
+        }
+        return $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previous
+    }
+}
+
 function Invoke-Compose {
     param([string[]]$Arguments)
     if ($DryRun) {
         Write-Host ("  [dry-run] docker compose {0}" -f ($Arguments -join ' ')) -ForegroundColor DarkGray
         return 0
     }
-    & docker compose -f $composeFile @Arguments 2>&1 | Out-Host
-    $code = $LASTEXITCODE
+    $code = Invoke-DockerCli -Arguments (@("compose", "-f", $composeFile) + $Arguments)
     if ($code -ne 0) { throw ("docker compose {0} failed (exit {1})" -f ($Arguments -join ' '), $code) }
     return $code
 }
@@ -130,15 +151,15 @@ if (-not $DryRun) {
         exit 1
     }
 
-    & docker info *> $null
-    if ($LASTEXITCODE -ne 0) {
+    $infoCode = Invoke-DockerCli -Arguments @("info", "--format", "{{.ServerVersion}}") -SuppressOutput
+    if ($infoCode -ne 0) {
         Write-Host "Docker is installed but the engine is not running." -ForegroundColor Red
         Write-Host "  Start 'Docker Desktop' from the Start menu, wait for 'Engine running', then retry."
         exit 1
     }
 
-    & docker compose version *> $null
-    if ($LASTEXITCODE -ne 0) {
+    $composeCode = Invoke-DockerCli -Arguments @("compose", "version") -SuppressOutput
+    if ($composeCode -ne 0) {
         Write-Host "Docker Compose v2 is required (comes with Docker Desktop)." -ForegroundColor Red
         exit 1
     }
@@ -182,7 +203,7 @@ if ($Logs -and $DryRun) {
     exit 0
 }
 if ($Logs) {
-    & docker compose -f $composeFile logs -f app web
+    $null = Invoke-DockerCli -Arguments @("compose", "-f", $composeFile, "logs", "-f", "app", "web")
     exit 0
 }
 
@@ -222,8 +243,8 @@ while ((Get-Date) -lt $deadline) {
 
 if (-not $healthy) {
     Write-Host "The stack did not become healthy in time." -ForegroundColor Red
-    & docker compose -f $composeFile ps
-    & docker compose -f $composeFile logs --tail=80 app web
+    $null = Invoke-DockerCli -Arguments @("compose", "-f", $composeFile, "ps")
+    $null = Invoke-DockerCli -Arguments @("compose", "-f", $composeFile, "logs", "--tail=80", "app", "web")
     throw "Health check failed: $healthUrl"
 }
 Write-Host "  application is healthy" -ForegroundColor Green

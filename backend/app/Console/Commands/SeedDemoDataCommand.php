@@ -22,6 +22,11 @@ class SeedDemoDataCommand extends Command
 
     public function handle(): int
     {
+        // Repair demo file permissions even when seeding is skipped: in Docker the
+        // seeder can run as root (docker compose exec), which would leave the private
+        // placeholder scans unreadable by the web process (www-data).
+        $this->makeDemoFilesReadable();
+
         if (User::query()->exists()) {
             $this->info('Demo data already present (users table is not empty) - nothing to do.');
 
@@ -37,7 +42,32 @@ class SeedDemoDataCommand extends Command
         $this->info('Database is empty - seeding demo data...');
         $exitCode = Artisan::call('db:seed', ['--force' => true]);
         $this->output->write(Artisan::output());
+        $this->makeDemoFilesReadable();
 
         return $exitCode === 0 ? self::SUCCESS : self::FAILURE;
+    }
+
+    /**
+     * Make storage/app/private/seed files world-readable (0644) and directories
+     * traversable (0755) so php-fpm can stream the demo ID scans.
+     */
+    private function makeDemoFilesReadable(): void
+    {
+        $base = storage_path('app/private/seed');
+
+        if (! is_dir($base)) {
+            return;
+        }
+
+        @chmod($base, 0755);
+
+        $items = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($base, \FilesystemIterator::SKIP_DOTS),
+            \RecursiveIteratorIterator::SELF_FIRST,
+        );
+
+        foreach ($items as $item) {
+            @chmod($item->getPathname(), $item->isDir() ? 0755 : 0644);
+        }
     }
 }

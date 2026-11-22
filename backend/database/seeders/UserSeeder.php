@@ -264,6 +264,14 @@ class UserSeeder extends Seeder
             if (! $disk->exists($path)) {
                 $disk->put($path, $contents);
             }
+
+            // In Docker the seeder may run as root (docker compose exec), which makes
+            // Laravel's private-disk files 0600/0700. The web process (www-data) must be
+            // able to read these demo scans, otherwise the admin ID preview 404s.
+            $fullPath = $disk->path($path);
+            @chmod($fullPath, 0644);
+            @chmod(dirname($fullPath), 0755);
+            @chmod(dirname($fullPath, 2), 0755);
         }
     }
 }

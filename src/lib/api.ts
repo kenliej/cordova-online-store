@@ -185,6 +185,38 @@ export const isTokenAuthMode: boolean =
 /** True when the client relies on Sanctum session cookies + CSRF. */
 export const isCookieAuthMode: boolean = !isTokenAuthMode;
 
+/**
+ * Converts an absolute URL returned by the API (built from APP_URL) into a path
+ * relative to the configured API base. Protected images must be fetched through
+ * `http` so they carry the session cookie or Bearer token; using the absolute
+ * URL directly breaks when the SPA is opened via a different host than APP_URL
+ * (e.g. Docker at http://127.0.0.1:8080 while APP_URL is http://localhost:8080),
+ * because the cookie is host-scoped and the request becomes cross-origin.
+ */
+function toApiRelativePath(url: string): string {
+  if (!isAbsoluteUrl(url)) return url;
+
+  try {
+    const parsed = new URL(url);
+    const basePath = (() => {
+      try {
+        return new URL(BASE_URL, window.location.origin).pathname.replace(/\/+$/, "");
+      } catch {
+        return "";
+      }
+    })();
+
+    let path = parsed.pathname;
+    if (basePath && (path === basePath || path.startsWith(`${basePath}/`))) {
+      path = path.slice(basePath.length) || "/";
+    }
+
+    return `${path}${parsed.search}${parsed.hash}`;
+  } catch {
+    return url;
+  }
+}
+
 const TOKEN_STORAGE_KEY = "omc.auth.token";
 
 /**
@@ -1721,7 +1753,10 @@ export async function updateContactMessage(
  */
 export async function fetchImageObjectUrl(url: string): Promise<string> {
   if (!url) throw new ApiError("Missing image URL.", { status: 400 });
-  const response = await http.get(url, { responseType: "blob" });
+  // Route the request through the configured API base instead of the absolute
+  // APP_URL: the browser may be on a different host (localhost vs 127.0.0.1),
+  // and cookies/tokens only attach for the API origin actually in use.
+  const response = await http.get(toApiRelativePath(url), { responseType: "blob" });
   return URL.createObjectURL(response.data as Blob);
 }
 

@@ -136,6 +136,10 @@ services:
       <<: *app-environment
       APP_ROLE: worker
     command: ["php", "artisan", "queue:work", "--sleep=2", "--tries=3", "--timeout=90", "--max-time=3600"]
+    # The image healthcheck probes php-fpm (port 9000), which this worker does
+    # not run; disable it so the container does not report "unhealthy".
+    healthcheck:
+      disable: true
     volumes:
       - app_storage:/var/www/html/storage
     depends_on:
@@ -155,6 +159,9 @@ services:
       <<: *app-environment
       APP_ROLE: worker
     command: ["php", "artisan", "schedule:work", "--verbose"]
+    # Same as the queue worker: no php-fpm inside this container.
+    healthcheck:
+      disable: true
     volumes:
       - app_storage:/var/www/html/storage
     depends_on:
