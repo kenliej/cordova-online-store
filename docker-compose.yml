@@ -9,9 +9,13 @@
 #   mailpit  local SMTP sink + web UI for password-reset e-mails
 #
 # Usage:
-#   cp .env.example .env      # then set APP_KEY, DB_PASSWORD, DB_ROOT_PASSWORD
+#   cp .env.example .env      # then set APP_KEY + DB_PASSWORD
 #   docker compose up -d --build
-#   docker compose exec app php artisan db:seed
+#   docker compose exec app php artisan app:seed-demo --force
+#
+# On Windows, `npm run docker:up` does all of the above (checks Docker, creates
+# .env, generates APP_KEY/DB_PASSWORD, waits for health and seeds demo data).
+# Full guide: docs/DOCKER-QUICKSTART.md
 #
 # Requires: Docker Engine 24+ / Docker Desktop with Compose v2.
 # ---------------------------------------------------------------------------

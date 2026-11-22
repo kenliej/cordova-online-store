@@ -29,6 +29,8 @@ FROM nginx:1.27-alpine
 
 COPY docker/nginx/default.conf /etc/nginx/conf.d/default.conf
 COPY docker/nginx/security-headers.conf /etc/nginx/snippets/security-headers.conf
+# Normalize line endings (Windows checkouts may be CRLF).
+RUN sed -i 's/\r$//' /etc/nginx/conf.d/default.conf /etc/nginx/snippets/security-headers.conf
 COPY --from=frontend /app/dist /usr/share/nginx/html
 
 EXPOSE 80

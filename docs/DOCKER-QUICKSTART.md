@@ -1,0 +1,298 @@
+# Docker quick start (backend + frontend + database)
+
+A beginner-friendly guide to running the **whole app** with Docker. You only need
+Docker Desktop - PHP, Node.js and PostgreSQL do **not** need to be installed on your
+computer for this mode.
+
+---
+
+## What Docker will run
+
+```
+Browser
+  http://localhost:8080
+        |
+        v
+  web (nginx)                <-- frontend: built React app
+   |-- /             -> React SPA files
+   |-- /api, /sanctum -> app (php-fpm, Laravel API)
+   |-- /storage      -> uploaded images
+        |
+        v
+  app (php-fpm)  --->  db (PostgreSQL 16)   data saved in the "db_data" volume
+  queue (queue:work)          background jobs
+  scheduler (schedule:work)   e.g. expiring unclaimed orders
+  mailpit                     fake mail inbox for password-reset e-mails
+```
+
+Everything is one origin (`http://localhost:8080`), so login uses secure HTTP-only
+cookies and there are no CORS problems.
+
+---
+
+## Step 0 - Install Docker Desktop
+
+1. Download and install **Docker Desktop**:
+   - Windows: https://docs.docker.com/desktop/setup/install/windows-install/
+   - macOS: https://docs.docker.com/desktop/setup/install/mac-install/
+   - Linux: https://docs.docker.com/engine/install/
+2. On Windows, Docker Desktop needs **WSL2** (the installer usually sets this up).
+   If asked, enable virtualization in the BIOS and run `wsl --update`.
+3. **Start Docker Desktop** and wait until the bottom-left status says
+   **"Engine running"**.
+4. Open a **new** PowerShell window and verify:
+
+```powershell
+docker --version          # e.g. Docker version 27.x
+docker compose version    # e.g. Docker Compose version v2.x
+```
+
+If you see `docker: command not found` / `not recognized`, Docker is not installed or
+the terminal was opened before installation - reopen it.
+
+---
+
+## Step 1 - Start the whole stack (one command)
+
+```powershell
+cd D:\onlinemall-frontend-main\onlinemall-frontend-main
+npm run docker:up
+```
+
+What it does:
+
+1. Checks that Docker Desktop is running.
+2. Creates `.env` from `.env.example` if missing.
+3. Generates **APP_KEY** and a random **DB_PASSWORD** into `.env` (only if empty).
+4. Builds the images and starts PostgreSQL, the API, nginx/frontend, queue, scheduler
+   and Mailpit.
+5. Waits until `http://localhost:8080/api/health` reports `"status":"ok"`.
+6. Seeds demo accounts/products/orders **only if the database is empty** (safe to run
+   again; it will not duplicate data).
+
+> The **first** build downloads images and compiles PHP extensions + the React app, so it
+> can take 5-15 minutes. Later starts take seconds.
+
+### Manual equivalent (if you prefer typing it yourself)
+
+```powershell
+cp .env.example .env
+# generate an APP_KEY:
+php -r "echo 'base64:'.base64_encode(random_bytes(32)).PHP_EOL;"   # paste into .env APP_KEY=...
+# set a password in .env:
+#   DB_PASSWORD=choose-a-strong-password
+docker compose up -d --build
+docker compose exec app php artisan app:seed-demo --force
+```
+
+If `php` is not installed on your computer, let the helper script generate the key
+(`npm run docker:up`), or use any 32-byte base64 string:
+
+```powershell
+$b = New-Object byte[] 32
+[System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b)
+"base64:" + [Convert]::ToBase64String($b)
+```
+
+---
+
+## Step 2 - Open the app and log in
+
+| URL | What |
+|---|---|
+| http://localhost:8080 | Application (frontend + API) |
+| http://localhost:8080/api/health | Health + database connectivity |
+| http://localhost:8080/admin/accounts | Admin dashboard (after admin login) |
+| http://127.0.0.1:8025 | Mailpit - password-reset e-mails |
+
+Demo accounts (created automatically on an empty database):
+
+| Role | Email | Password |
+|---|---|---|
+| Admin | `admin@onlinemall.test` | `Admin#2026Secure` |
+| Worker | `worker@onlinemall.test` | `Worker#2026Secure` |
+| Customer | `customer@onlinemall.test` | `Customer#2026Secure` |
+
+---
+
+## Step 3 - Check that everything is healthy
+
+```powershell
+docker compose ps
+```
+
+Expected: `onlinemall-db` and `onlinemall-app` are **healthy**, `onlinemall-web`,
+`onlinemall-queue`, `onlinemall-scheduler`, `onlinemall-mailpit` are **running**.
+
+```powershell
+# API + DB health (should print {"data":{"status":"ok","database":"ok",...}})
+Invoke-WebRequest http://localhost:8080/api/health -UseBasicParsing | Select-Object -Expand Content
+
+# live logs (Ctrl+C to stop watching; the app keeps running)
+docker compose logs -f app web
+```
+
+You do **not** need to run migrations manually: the `app` container waits for
+PostgreSQL and runs `php artisan migrate --force` on every start.
+
+---
+
+## Step 4 - Understanding the database (PostgreSQL)
+
+### Automatic setup
+
+- The `db` service uses the official **PostgreSQL 16** image.
+- On the first start it creates the database and user from `.env`:
+  - `DB_DATABASE` (default `online_mall`)
+  - `DB_USERNAME` (default `onlinemall`)
+  - `DB_PASSWORD` (generated by `npm run docker:up`, or set by you)
+- Data is stored in the Docker volume **`onlinemall_db_data`** and survives
+  `docker compose down` / restart.
+- Only the app containers can reach the database; port 5432 is **not** exposed to
+  your computer (safer by default).
+
+### Open a SQL shell
+
+```powershell
+docker compose exec db psql -U onlinemall -d online_mall
+```
+
+Useful psql commands: `\dt` (tables), `\d users` (columns), `\q` (quit).
+
+### Run SQL
+
+```powershell
+docker compose exec db psql -U onlinemall -d online_mall -c "select count(*) from users;"
+```
+
+### Backup / restore
+
+```powershell
+# backup to a file on your computer
+docker compose exec -T db pg_dump -U onlinemall online_mall > backup.sql
+
+# restore (careful: it writes into the running database)
+Get-Content backup.sql | docker compose exec -T db psql -U onlinemall -d online_mall
+```
+
+### Reset the database (delete everything and reseed)
+
+```powershell
+npm run docker:reset
+```
+
+or manually:
+
+```powershell
+docker compose down -v        # -v deletes the database + uploads volumes
+docker compose up -d --build
+docker compose exec app php artisan app:seed-demo --force
+```
+
+### Connect with pgAdmin / DBeaver (optional)
+
+The database port is not published. Create a file `docker-compose.override.yml` in the
+repo root:
+
+```yaml
+services:
+  db:
+    ports:
+      - "5432:5432"
+```
+
+Then `docker compose up -d db` and connect to `localhost:5432`, database
+`online_mall`, user `onlinemall`, password from `.env` (`DB_PASSWORD`).
+Delete the override file when done.
+
+### Create a real admin (not the demo account)
+
+```powershell
+docker compose exec app php artisan user:create-admin you@example.com
+```
+
+---
+
+## Step 5 - Everyday commands
+
+| Task | Command |
+|---|---|
+| Start (after first setup) | `docker compose up -d` |
+| Stop (keep data) | `docker compose down` |
+| Stop + delete data | `docker compose down -v` |
+| Status / health | `docker compose ps` |
+| All logs | `docker compose logs -f` |
+| API + nginx logs | `docker compose logs -f app web` |
+| Rebuild after code changes | `docker compose up -d --build` |
+| Restart after `.env` changes | `docker compose up -d --force-recreate app queue scheduler` |
+| Laravel command | `docker compose exec app php artisan <command>` |
+| Shell in API container | `docker compose exec app sh` |
+| Database shell | `docker compose exec db psql -U onlinemall -d online_mall` |
+| Mail inbox | http://127.0.0.1:8025 |
+| Clean unused Docker data | `docker system prune` |
+
+Notes:
+
+- **Backend/frontend code changes are baked into images**, so rebuild:
+  - backend change -> `docker compose up -d --build app queue scheduler`
+  - frontend change -> `docker compose up -d --build web`
+  - simplest: `docker compose up -d --build` (Docker reuses cached layers)
+- `.env` changes need recreated containers
+  (`docker compose up -d --force-recreate app queue scheduler`); `web`/`db` usually
+  only need it if their env changed.
+- Automated tests run locally / in CI (the production image intentionally has no dev
+  dependencies): `npm run test:e2e:local` (local) - see
+  [TESTING-BOTH-BUILDS.md](TESTING-BOTH-BUILDS.md).
+
+---
+
+## Step 6 - Optional: frontend hot-reload while the backend stays in Docker
+
+The `web` container serves a production build. If you are editing frontend code and want
+instant reload, run Vite locally against the Docker backend:
+
+1. In the root `.env`, allow the Vite origin (append to the existing values):
+
+   ```dotenv
+   SANCTUM_STATEFUL_DOMAINS=localhost:8080,127.0.0.1:8080,localhost:5173,127.0.0.1:5173
+   CORS_ALLOWED_ORIGINS=http://localhost:8080,http://127.0.0.1:8080,http://localhost:5173,http://127.0.0.1:5173
+   ```
+
+2. Apply it: `docker compose up -d --force-recreate app`
+3. Start Vite (repo root):
+
+   ```powershell
+   $env:VITE_PROXY_TARGET="http://127.0.0.1:8080"
+   npm run dev
+   ```
+
+4. Open **http://127.0.0.1:5173** (the Docker stack is still available on :8080).
+
+---
+
+## Troubleshooting
+
+| Problem | Cause / fix |
+|---|---|
+| `docker: command not found` | Docker Desktop not installed, or terminal opened before install. Install, then reopen PowerShell. |
+| `Cannot connect to the Docker daemon` / `error during connect` | Docker Desktop is not running. Start it and wait for "Engine running". |
+| `WSL2 is not installed` / virtualization error | Enable virtualization in the BIOS, run `wsl --update`, restart, then reopen Docker Desktop. |
+| `port is already allocated` for 8080 | Something else uses 8080. Set `WEB_PORT=8081` in `.env`, rerun `npm run docker:up`, use http://localhost:8081. |
+| `APP_KEY is required` or `DB_PASSWORD is required` | `.env` is missing values. Delete/rename `.env` and run `npm run docker:up` again (it regenerates them), or fill them manually. |
+| Health never becomes ready | `docker compose ps` + `docker compose logs --tail=100 app db web`. First build is slow; also check Docker Desktop has enough memory (Settings -> Resources, 4 GB+). |
+| `database system is starting up` loop | PostgreSQL is still initializing; wait. If you reused a volume with a different DB_PASSWORD, `docker compose down -v` (deletes data) and start again. |
+| Login says "These credentials do not match" | Run `docker compose exec app php artisan app:seed-demo --force` (only seeds an empty DB), or create an admin with `user:create-admin`. |
+| Duplicate demo users/orders | `db:seed` was run more than once. Reset: `npm run docker:reset`. |
+| `entrypoint: not found` / `$'\r'` errors (Windows) | Fixed in the Dockerfile (line endings normalized); rebuild without cache: `docker compose build --no-cache app web`. |
+| Password-reset e-mail not received | It is captured by Mailpit: open http://127.0.0.1:8025. |
+| Everything broken, start clean | `docker compose down -v --rmi local` then `npm run docker:up` (deletes DB, images and volumes). |
+
+---
+
+## Security notes for this local stack
+
+- `.env` contains local secrets (APP_KEY, DB password). It is git-ignored - never commit it.
+- Only `8080` and Mailpit on `127.0.0.1:8025` are published; PostgreSQL is internal-only.
+- This is a production-like local stack: `APP_ENV=production`, `APP_DEBUG=false`,
+  `SESSION_SECURE_COOKIE=false` (because it runs on http). For a real server: use HTTPS,
+  set `SESSION_SECURE_COOKIE=true`, `APP_FORCE_HTTPS=true`, and change all passwords.

@@ -58,7 +58,9 @@ RUN apk add --no-cache \
 # Production PHP hardening (see docker/php/php.ini)
 COPY docker/php/php.ini /usr/local/etc/php/conf.d/zz-onlinemall.ini
 COPY docker/php/entrypoint.sh /usr/local/bin/entrypoint
-RUN chmod +x /usr/local/bin/entrypoint
+# A Windows checkout may provide CRLF files; normalize before the shebang runs.
+RUN sed -i 's/\r$//' /usr/local/bin/entrypoint \
+    && chmod +x /usr/local/bin/entrypoint
 
 WORKDIR /var/www/html
 

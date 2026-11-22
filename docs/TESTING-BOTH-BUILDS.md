@@ -266,7 +266,7 @@ proxies `/api`, `/sanctum`, `/storage` to the target set in `VITE_PROXY_TARGET`
    ```bash
    cp .env.example .env        # set APP_KEY, DB_PASSWORD
    docker compose up -d --build
-   docker compose exec app php artisan db:seed
+   docker compose exec app php artisan app:seed-demo --force
    # health: http://localhost:8080/api/health
    ```
 
@@ -355,7 +355,7 @@ Manual equivalent:
 ```bash
 cp .env.example .env        # set APP_KEY, DB_PASSWORD
 docker compose up -d --build
-docker compose exec app php artisan db:seed
+docker compose exec app php artisan app:seed-demo --force
 # wait for http://localhost:8080/api/health
 
 # browser E2E against the real containers

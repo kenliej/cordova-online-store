@@ -176,21 +176,10 @@ try {
         Write-Host "  resetting database (migrate:fresh --seed) ..." -ForegroundColor DarkGray
         & php @phpArgs artisan migrate:fresh --seed --force 2>&1 | Select-Object -Last 3 | Out-Host
     } else {
-        $probe = @"
-try {
-    `$pdo = new PDO('pgsql:host=$dbHost;port=$dbPort;dbname=$dbName', '$dbUser', '$dbPassword');
-    echo (int) `$pdo->query('select count(*) from users')->fetchColumn();
-} catch (Throwable `$e) {
-    echo 'missing';
-}
-"@
-        $count = ((& php @phpArgs -r $probe 2>$null) -join '').Trim()
-        if ($count -eq "missing" -or $count -eq "0") {
-            Write-Host "  first run: migrating + seeding demo data ..." -ForegroundColor DarkGray
-            & php @phpArgs artisan migrate --seed --force 2>&1 | Select-Object -Last 3 | Out-Host
-        } else {
-            Write-Host "  database already seeded ($count users) - use -Fresh to reset" -ForegroundColor DarkGray
-        }
+        # Migrations are a no-op when up to date; demo seeding only runs when empty
+        # (idempotent helper, same one the Docker stack uses).
+        & php @phpArgs artisan migrate --force 2>&1 | Select-Object -Last 2 | Out-Host
+        & php @phpArgs artisan app:seed-demo 2>&1 | Select-Object -Last 3 | Out-Host
     }
     & php @phpArgs artisan config:clear 2>&1 | Out-Null
 } finally {

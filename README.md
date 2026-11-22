@@ -101,23 +101,35 @@ Request/response conventions and the full contract live in
 
 ## Quick start — Docker (recommended)
 
-Requirements: Docker Engine 24+ / Docker Desktop with Compose v2.
+> **New to Docker?** Follow the step-by-step guide
+> [`docs/DOCKER-QUICKSTART.md`](docs/DOCKER-QUICKSTART.md) - install Docker Desktop,
+> start the stack, database setup/backups/resets, everyday commands and troubleshooting.
+
+One command (Windows PowerShell) does everything - checks Docker, creates `.env`,
+generates `APP_KEY` + `DB_PASSWORD`, builds/starts the stack, waits for health and
+seeds demo data only if the database is empty:
+
+```powershell
+npm run docker:up
+# stop:            npm run docker:down
+# reset database:  npm run docker:reset
+# follow logs:     npm run docker:logs
+```
+
+Manual equivalent:
 
 ```bash
 # 1. Configuration
 cp .env.example .env
 
-# 2. Generate the application key and paste it into APP_KEY=... in .env
-php -r "echo 'base64:'.base64_encode(random_bytes(32)).PHP_EOL;"
-#    (no PHP? docker run --rm php:8.2-cli php -r "echo 'base64:'.base64_encode(random_bytes(32)), PHP_EOL;")
-
-# 3. Set strong database credentials in .env (DB_PASSWORD; used to create the PostgreSQL user)
+# 2. Set APP_KEY (generate with php or the PowerShell snippet in the guide)
+# 3. Set a strong DB_PASSWORD in .env (used to create the PostgreSQL user)
 
 # 4. Build and start the whole stack
 docker compose up -d --build
 
-# 5. Seed demo data (first boot only)
-docker compose exec app php artisan db:seed
+# 5. Seed demo data only when the database is empty (safe to re-run)
+docker compose exec app php artisan app:seed-demo --force
 ```
 
 Open:
