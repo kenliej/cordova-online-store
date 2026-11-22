@@ -75,3 +75,6 @@ dist-deploy/
 backend/*.zip
 test-results/
 
+# Local PostgreSQL binaries/data used for verification (never commit)
+.tools/
+

@@ -7,7 +7,7 @@
 | **Scope** | Laravel 12 backend (`backend/`), API surface, Docker stack (`docker/`, `docker-compose.yml`), frontend integration snapshot (`src/`), dependency supply chain |
 | **Method** | Manual source review + adversarial PHPUnit feature tests + live runtime probes + dependency/infra/frontend review |
 | **Audit date** | 2026-11-20 (Asia/Manila) |
-| **Backend under test** | Laravel 12 + Sanctum 4 SPA cookie auth, PHP 8.2.12, MySQL 8.4 (prod/docker), SQLite `:memory:` (tests) |
+| **Backend under test** | Laravel 12 + Sanctum 4 SPA cookie auth, PHP 8.2.12, PostgreSQL 16 (prod/docker/local), SQLite `:memory:` (fast tests) |
 | **Runtime target** | `http://127.0.0.1:8000` (seeded `online_mall` DB, `php artisan serve`) |
 | **Review-only guarantee** | No application source, route, config, Docker, frontend or teammate test file was modified. Deliverables added: `backend/tests/Feature/Security/*` and this document. |
 | **Verdict** | **PASS with deployment conditions** — all 7 findings fixed and re-verified; residual risks are accepted/documented below. |
@@ -60,7 +60,7 @@ Seven findings were identified. The most serious (SEC-01, **High**) was a Host-h
 
 1. **Manual review** of the full backend request path (route → middleware → policy/FormRequest → controller → service → model/resource), Docker stack and env configuration.
 2. **Adversarial PHPUnit suite** (`RefreshDatabase`, `Sanctum::actingAs`, factories, `Storage::fake`): role matrix, IDOR, auth bypass, mass assignment, SQLi/XSS, upload abuse, business-logic abuse, rate limits, exposure/headers.
-3. **Live runtime probes** against the running seeded backend using the same cookie/CSRF flow as the SPA (PowerShell `WebRequestSession` + `curl.exe` for raw Host-header tests). Probes created a few records through the public API only; **no destructive DB command (`migrate:fresh/refresh/seed`) was ever run against the shared MySQL instance**.
+3. **Live runtime probes** against the running seeded backend using the same cookie/CSRF flow as the SPA (PowerShell `WebRequestSession` + `curl.exe` for raw Host-header tests). Probes created a few records through the public API only; **no destructive DB command (`migrate:fresh/refresh/seed`) was ever run against the shared database instance**. The database was later migrated from MySQL to PostgreSQL 16; the same probe/test process was repeated against PostgreSQL (see Appendix C).
 4. **Dependency audit** (`composer audit`, `npm audit`), lockfile/pinning review, tracked-file secret scan.
 5. **Infra/Docker review** against §7/§8 of the architecture spec.
 6. **Recheck** of every finding after fixes: automated tests, runtime reproduction, and inspection of the exact changed lines.
@@ -81,7 +81,7 @@ Seven findings were identified. The most serious (SEC-01, **High**) was a Host-h
 | PHP | 8.2.12 (CLI, ZTS — local); Docker `php:8.2-fpm-alpine` |
 | Laravel | 12.x (lockfile-pinned `composer.lock`, 315 KB) |
 | Sanctum | 4.x (SPA cookie guard `web`) |
-| Database | MySQL/MariaDB local `online_mall` (seeded); PHPUnit uses SQLite `:memory:` (22 migrations) |
+| Database | PostgreSQL 16 `online_mall` (seeded); PHPUnit uses SQLite `:memory:` by default and PostgreSQL via `phpunit.pgsql.xml` |
 | Frontend | React 19.3, Vite 8.3.5, TypeScript ~6.0.3, axios 1.21 (cookies + `withXSRFToken`) |
 | Auth model | Sanctum first-party SPA cookies, `SESSION_ENCRYPT=true`, `SESSION_DRIVER=database`, `SameSite=Lax`, sliding 120 min lifetime, session regeneration on login |
 | Test env | `APP_ENV=testing`, `BCRYPT_ROUNDS=4`, `CACHE_STORE=array`, `MAIL_MAILER=array`, SQLite |
@@ -292,7 +292,7 @@ Two recheck rounds were performed: round 1 after SEC-01…SEC-06 fixes, round 2 
 | Docker build deps | `composer install --no-dev`, `npm ci --legacy-peer-deps` (pre-existing TypeScript peer-range conflict documented), tests/phpunit `.dockerignore`d out of runtime images |
 | TypeScript pin | `typescript ~6.0.3` — `typescript-eslint` cannot load TypeScript 7 (pre-existing upstream incompatibility); documented, does not affect runtime security |
 | Committed secrets scan | No tracked `.env`, private keys, API tokens, AWS keys or `sk_live_` strings. `.env` ignored in root and backend `.gitignore`; `.dockerignore` excludes `.env`/storage/vendor. Only intentional **demo seed credentials** appear in `README.md` + `docs/BACKEND_ARCHITECTURE.md` (accepted R-04). |
-| Supply-chain notes | Docker base tags are minor-pinned (`mysql:8.4`, `nginx:1.27-alpine`, `node:22-alpine`, `php:8.2-fpm-alpine`, `composer:2`); `axllent/mailpit:latest` unpinned (dev-only, R-06). Recommend digest pinning for production. |
+| Supply-chain notes | Docker base tags are minor-pinned (`postgres:16-alpine`, `nginx:1.27-alpine`, `node:22-alpine`, `php:8.2-fpm-alpine`, `composer:2`); `axllent/mailpit:latest` unpinned (dev-only, R-06). Recommend digest pinning for production. |
 
 ## 13. Docker / infrastructure review
 
@@ -301,7 +301,7 @@ Two recheck rounds were performed: round 1 after SEC-01…SEC-06 fixes, round 2 
 | Runtime user | php-fpm image has no `USER`; FPM master runs as root and workers drop to `www-data` (standard php-fpm); queue/scheduler exec as `www-data` (`entrypoint.sh:77`); `no-new-privileges:true` on all services | Accepted R-07 |
 | Dev packages in image | Composer `--no-dev`, `--no-scripts`, optimized autoload; `backend/tests`, phpunit, docs excluded via `.dockerignore` | Pass |
 | OPCache | `opcache.enable=1`, memory 192MB, `validate_timestamps=0` (prod image) | Pass |
-| Healthchecks | app: PHP TCP probe on 9000; web: `/healthz` via wget; db: `mysqladmin ping` | Pass |
+| Healthchecks | app: PHP TCP probe on 9000; web: `/healthz` via wget; db: `pg_isready` | Pass |
 | Database exposure | `db` service has **no published port**; only internal `onlinemall` bridge network; named `db_data` volume; root/app passwords required via `${VAR:?}` | Pass |
 | Secrets management | `APP_KEY`/`DB_PASSWORD`/`DB_ROOT_PASSWORD` mandatory in compose; env-driven config; no secrets baked into images | Pass |
 | Storage perms | Named `app_storage` volume; entrypoint `chown -R www-data`; web mounts read-only; storage:link created; `public/storage` symlink present locally | Pass |
@@ -431,3 +431,51 @@ threat model. **No open findings.**
 | Admin provisioning | `user:create-admin` artisan command uses the global strong-password policy, never prints a stored password twice, and is safe for production (no demo seeding required). Tests in `tests/Feature/Console/CreateAdminCommandTest.php`. |
 | Frontend token storage | Token in `sessionStorage` (or `localStorage` only with “Remember me”), never in cookies; Vercel CSP `script-src 'self'` (no inline scripts) limits XSS surface; `VITE_AUTH_MODE=token` is opt-in per build. |
 | Deployment files | cPanel shim validates the app path and fails closed with a generic 500; `.htaccess` forwards `Authorization` to PHP-FPM (missing header would break auth), denies dotfiles/backups, disables indexes. `vercel.json` adds SPA rewrites + security headers (CSP, nosniff, frame-deny, referrer, permissions policy). |
+
+---
+
+### Appendix C — Database platform migration: MySQL → PostgreSQL 16
+
+The application database was moved from MySQL 8.4 to **PostgreSQL 16**. This appendix
+records the change and its verification; it does not alter the findings above.
+
+**Changes**
+
+| Area | Change |
+|---|---|
+| Docker | `db` service is now `postgres:16-alpine` (volume at `/var/lib/postgresql/data`), credentials via `POSTGRES_DB/USER/PASSWORD`, healthcheck `pg_isready`, no DB port published. |
+| PHP image | `pdo_pgsql` + `pgsql` installed (`postgresql-dev` build deps, `libpq` runtime), `pdo_mysql` removed. |
+| Entrypoint | waits for the PostgreSQL DSN (`pgsql:host=…`), still refuses to start without `APP_KEY`, runs `migrate --force` and warms caches. |
+| Config | `config/database.php` pgsql defaults the application; `search_path` and `sslmode` are env-driven (`DB_SEARCH_PATH`, `DB_SSLMODE`). |
+| Portability | 8 `enum` columns compile to `varchar + CHECK` on PG; `json` metadata stays `json`; all search scopes now use `whereLike()/orWhereLike()` so PostgreSQL compiles `ILIKE` (plain `LIKE` is case-sensitive on PG). No raw MySQL SQL, no `GROUP BY` strictness issues; `lockForUpdate()`, `increment()` and prepared statements behave identically. |
+| Tests / CI | Fast suite remains SQLite `:memory:`; `phpunit.pgsql.xml` + `scripts/test-pgsql.ps1` run the entire suite on PostgreSQL; CI starts a `postgres:16` service and runs both suites. |
+
+**Verification (performed against a local PostgreSQL 16.6 server)**
+
+| Check | Result |
+|---|---|
+| `migrate:fresh --seed` from an empty PostgreSQL database | PASS — 26 tables; seeded 11 users, 12 products, 13 orders, 21 notifications |
+| Full PHPUnit suite on PostgreSQL (`phpunit.pgsql.xml`) | **337 passed / 2,616 assertions** |
+| Full PHPUnit suite on SQLite (default) | **337 passed / 2,616 assertions** |
+| Two-build orchestration (`scripts/test-e2e.ps1`) on PostgreSQL | **16/16 checks** — SQLite suite, PostgreSQL suite, both frontend builds, cookie-mode browser suite 6/6, Bearer+CORS browser suite 6/6, Docker static validation |
+| Cookie-auth API smoke (`scripts/smoke-test.ps1`) | **34/34** |
+| Token/CORS API smoke (`scripts/smoke-test-token.ps1`) | **13/13** |
+| Static Docker configuration (`scripts/validate-docker-config.py`) | **46/46** (live image build still deferred to a Docker host/CI) |
+| Packaged cPanel artifact (`dist-deploy/cpanel/omc-backend.zip`) | PASS — boots (Laravel 12.73), connects to PostgreSQL 16.6 (`db:show`, 26 tables), `migrate:status` all ran, 58 API routes, `config:cache` OK |
+
+**Security notes**
+
+- Parameter binding is unchanged; no SQL string concatenation was introduced by the port.
+- Database credentials remain environment-only (`.env` git-ignored / excluded from images);
+  the app user owns only its database and no DB port is published by the compose stack.
+- For remote/managed PostgreSQL set `DB_SSLMODE=require`; local Docker/localhost may use
+  `prefer`/`disable`.
+- cPanel plans frequently do **not** provide PostgreSQL; use a managed instance and keep
+  `DB_SSLMODE=require` (documented in `docs/DEPLOYMENT-CPANEL-VERCEL.md`).
+
+**Residual / conditions**
+
+- Live Docker image build + stack start were not executable in this environment (no Docker
+  engine); compose/nginx/php configs are validated statically and CI builds the stack.
+- The portable PostgreSQL 16.6 binaries used for local verification live under `.tools/`
+  (git-ignored); production uses the `postgres:16-alpine` container or a managed instance.

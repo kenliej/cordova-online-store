@@ -131,8 +131,10 @@ class Product extends Model
         $term = trim($term);
 
         $query->where(function (Builder $query) use ($term): void {
-            $query->where('name', 'like', "%{$term}%")
-                ->orWhere('description', 'like', "%{$term}%");
+            // whereLike() is portable: PostgreSQL compiles ILIKE so search stays
+            // case-insensitive (plain LIKE is case-sensitive on PG).
+            $query->whereLike('name', "%{$term}%")
+                ->orWhereLike('description', "%{$term}%");
         });
     }
 

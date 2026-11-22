@@ -1,6 +1,6 @@
 #!/bin/sh
 # Online Mall API entrypoint.
-# - web role: wait for MySQL, run migrations, storage link, warm caches
+# - web role: wait for PostgreSQL, run migrations, storage link, warm caches
 # - queue/scheduler roles: assume migrations were run by the web role
 set -eu
 
@@ -29,12 +29,18 @@ chmod -R ug+rwX storage bootstrap/cache
 wait_for_database() {
     i=0
     until php -r '
+        $driver = getenv("DB_CONNECTION") ?: "pgsql";
+        $host = getenv("DB_HOST") ?: "db";
+        $port = getenv("DB_PORT") ?: ($driver === "pgsql" ? "5432" : "3306");
+        $database = getenv("DB_DATABASE");
+        $dsn = $driver === "pgsql"
+            ? "pgsql:host={$host};port={$port};dbname={$database}"
+            : "mysql:host={$host};port={$port};dbname={$database}";
         try {
-            new PDO(
-                "mysql:host=".getenv("DB_HOST").";port=".(getenv("DB_PORT") ?: "3306").";dbname=".getenv("DB_DATABASE"),
-                getenv("DB_USERNAME"),
-                getenv("DB_PASSWORD")
-            );
+            new PDO($dsn, getenv("DB_USERNAME"), getenv("DB_PASSWORD"), [
+                PDO::ATTR_TIMEOUT => 3,
+                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            ]);
             exit(0);
         } catch (Throwable $e) {
             exit(1);
@@ -42,7 +48,7 @@ wait_for_database() {
     ' >/dev/null 2>&1; do
         i=$((i + 1))
         if [ "$i" -ge 60 ]; then
-            echo "[entrypoint] FATAL: database not reachable at ${DB_HOST:-db}:${DB_PORT:-3306}" >&2
+            echo "[entrypoint] FATAL: database not reachable at ${DB_HOST:-db}:${DB_PORT:-5432}" >&2
             exit 1
         fi
         sleep 2

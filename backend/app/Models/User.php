@@ -248,11 +248,11 @@ class User extends Authenticatable
         $like = '%'.str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $term).'%';
 
         $query->where(function (Builder $query) use ($like): void {
-            $query->where('name', 'like', $like)
-                ->orWhere('email', 'like', $like)
-                ->orWhere('phone', 'like', $like)
-                ->orWhere('customer_no', 'like', $like)
-                ->orWhere('worker_no', 'like', $like);
+            $query->whereLike('name', $like)
+                ->orWhereLike('email', $like)
+                ->orWhereLike('phone', $like)
+                ->orWhereLike('customer_no', $like)
+                ->orWhereLike('worker_no', $like);
         });
     }
 

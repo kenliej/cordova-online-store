@@ -20,6 +20,20 @@ jobs:
     defaults:
       run:
         working-directory: backend
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: online_mall_test
+          POSTGRES_USER: onlinemall
+          POSTGRES_PASSWORD: ci-test-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U onlinemall -d online_mall_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
     steps:
       - uses: actions/checkout@v4
 
@@ -27,7 +41,7 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: '8.2'
-          extensions: pdo_mysql, pdo_sqlite, mbstring, bcmath, fileinfo, curl, dom, xml, tokenizer, zip
+          extensions: pdo_pgsql, pgsql, pdo_sqlite, mbstring, bcmath, fileinfo, curl, dom, xml, tokenizer, zip
           coverage: none
 
       - name: Cache Composer packages
@@ -51,8 +65,19 @@ jobs:
       - name: Code style (Pint)
         run: vendor/bin/pint --test
 
-      - name: Run test suite
+      - name: Run test suite (SQLite in-memory)
         run: php artisan test --parallel
+
+      - name: Run test suite (PostgreSQL 16)
+        env:
+          DB_CONNECTION: pgsql
+          DB_HOST: 127.0.0.1
+          DB_PORT: '5432'
+          DB_DATABASE: online_mall_test
+          DB_USERNAME: onlinemall
+          DB_PASSWORD: ci-test-password
+          DB_SSLMODE: disable
+        run: vendor/bin/phpunit -c phpunit.pgsql.xml
 
   frontend:
     name: Frontend build + audit
@@ -87,7 +112,6 @@ jobs:
           cp .env.example .env
           php -r "file_put_contents('.env', str_replace('APP_KEY=', 'APP_KEY=base64:'.base64_encode(random_bytes(32)).PHP_EOL, file_get_contents('.env')));"
           sed -i 's/^DB_PASSWORD=$/DB_PASSWORD=ci-test-password/' .env
-          sed -i 's/^DB_ROOT_PASSWORD=$/DB_ROOT_PASSWORD=ci-root-test-password/' .env
 
       - name: Build images
         run: docker compose build --pull

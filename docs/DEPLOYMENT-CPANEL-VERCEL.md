@@ -8,7 +8,7 @@ https://YOUR-PROJECT.vercel.app                    ← React SPA (Vercel)
         ▼
 https://kjugarap.top/omc-backend/api/…             ← Laravel API (cPanel, subdirectory)
         │
-        ├─ MySQL database (cPanel)
+        ├─ PostgreSQL database (cPanel PostgreSQL, or a managed instance)
         └─ /home/CPANEL_USER/omc-backend/          ← Laravel project (outside public_html)
 ```
 
@@ -24,9 +24,14 @@ Same-origin deployments (Docker) keep using cookies automatically.
 
 **cPanel side**
 
-- PHP **8.2+** (`MultiPHP Manager`), extensions: `pdo_mysql`, `mbstring`, `openssl`,
+- PHP **8.2+** (`MultiPHP Manager`), extensions: `pdo_pgsql`, `pgsql`, `mbstring`, `openssl`,
   `tokenizer`, `xml`, `ctype`, `json`, `fileinfo`, `curl`, `dom`, `bcmath`.
-- One MySQL database + user (cPanel → *MySQL® Databases*).
+- A PostgreSQL **16+** database. Two options:
+  - cPanel → *PostgreSQL Databases* **if your host enables PostgreSQL** (open a ticket if the
+    icon is missing); create the DB + user there, then use `DB_HOST=127.0.0.1`.
+  - Otherwise use a managed PostgreSQL (Neon, Supabase, RDS, DigitalOcean, …): create the
+    database, whitelist your cPanel server IP, and set `DB_HOST`/`DB_PORT`/`DB_SSLMODE=require`
+    in the backend `.env`. This is the common path because many cPanel plans ship MySQL only.
 - SSH/Terminal access *or* Composer locally to build `vendor/`.
 - Cron jobs (cPanel → *Cron Jobs*).
 - An SSL certificate for `kjugarap.top` (cPanel → *SSL/TLS Status*; AutoSSL is fine).
@@ -163,7 +168,8 @@ Copy `deploy/cpanel/env.example` to `/home/CPANEL_USER/omc-backend/.env` and set
 | `APP_ENV` / `APP_DEBUG` | `production` / `false` |
 | `APP_FORCE_HTTPS` | `true` |
 | `TRUSTED_HOSTS` | `kjugarap.top` |
-| `DB_*` | from cPanel *MySQL Databases* |
+| `DB_*` | PostgreSQL connection: `DB_CONNECTION=pgsql`, host/port/database/user/password; `DB_SSLMODE=require` for a managed instance |
+| `DB_SSLMODE` | `prefer` for a local cPanel PG, `require` for managed/remote PostgreSQL |
 | `SANCTUM_STATEFUL_DOMAINS` | `kjugarap.top` (API host only; **not** the Vercel host) |
 | `SANCTUM_EXPIRATION` | `10080` (7 days) or empty for non-expiring tokens |
 | `CORS_ALLOWED_ORIGINS` | exact frontend origin, e.g. `https://omc.vercel.app` |
@@ -334,7 +340,7 @@ Vercel: push to the connected branch (or `vercel --prod`). Keep
 - [ ] Token storage: `sessionStorage` unless *Remember me*; the Vercel CSP (`script-src
       'self'`, no inline scripts) reduces XSS risk — keep it and never add remote scripts
       without review.
-- [ ] Backups: cPanel backup + periodic `mysqldump`; uploads live in
+- [ ] Backups: cPanel backup + periodic `pg_dump`; uploads live in
       `/home/CPANEL_USER/omc-backend/storage/app/public`.
 - [ ] `composer audit`/`npm audit` before each release; keep `php artisan config:cache`
       after `.env` changes.

@@ -42,9 +42,11 @@ RUN apk add --no-cache \
         libcurl \
         curl-dev \
         icu-libs \
-    && apk add --no-cache --virtual .build-deps $PHPIZE_DEPS icu-dev \
+        libpq \
+    && apk add --no-cache --virtual .build-deps $PHPIZE_DEPS icu-dev postgresql-dev \
     && docker-php-ext-install -j"$(nproc)" \
-        pdo_mysql \
+        pdo_pgsql \
+        pgsql \
         mbstring \
         bcmath \
         opcache \

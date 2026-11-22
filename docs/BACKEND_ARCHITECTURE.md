@@ -2,7 +2,7 @@
 
 > Authoritative spec for the Laravel backend (`backend/`) and the React frontend rewire.
 > All implementers MUST follow this file. Ask the Lead before deviating.
-> Stack: PHP 8.2, Laravel 12.73, Sanctum (SPA cookies), MySQL 8.4 (prod/docker) / MariaDB 10.4 (local), Vite React 19 frontend.
+> Stack: PHP 8.2, Laravel 12.73, Sanctum (SPA cookies), PostgreSQL 16 (prod/docker/local), Vite React 19 frontend.
 
 ---
 
@@ -12,15 +12,16 @@
 onlinemall-frontend-main/
 ├─ backend/                    # Laravel 12 API (single source of truth for data)
 ├─ src/                        # existing React frontend (to be rewired to API)
-├─ docker/                     # php-fpm Dockerfile+ini, nginx Dockerfile+conf, mysql init
+├─ docker/                     # php-fpm Dockerfile+ini, nginx Dockerfile+conf (PostgreSQL runs as a compose service)
 ├─ docker-compose.yml
 ├─ docs/                       # this spec, FRONTEND_CONTRACT.md, SECURITY_AUDIT.md, API.md
 ├─ .env.example               # root: compose + frontend build args
 └─ README.md
 ```
 
-Local dev DB (already provisioned): `online_mall`, user `onlinemall` / `onlinemall_dev_pw_2026` @ 127.0.0.1:3306.
-Test DB: `online_mall_test`. Automated tests default to SQLite `:memory:` (phpunit.xml).
+Local dev DB: PostgreSQL 16, `online_mall`, user `onlinemall` @ 127.0.0.1:5432 (see backend/.env.example).
+Test DB: `online_mall_test`. The fast default suite uses SQLite `:memory:` (phpunit.xml); the
+PostgreSQL suite uses `phpunit.pgsql.xml` (CI + `scripts/test-pgsql.ps1`).
 
 ## 2. Conventions
 
@@ -224,16 +225,16 @@ Legend: 🔓 public · 👤 any auth · 🧑 customer · 🛠 worker · 👑 adm
 
 ## 8. Docker (owner: Lead)
 
-Services: `db` (mysql:8.4, volume, healthcheck), `app` (php:8.2-fpm-alpine built from `docker/php/Dockerfile`, app code, composer deps, non-root, healthcheck), `web` (nginx:alpine multistage: build React with node:22-alpine → serve dist + proxy `/api` to app:9000, port 8080:80), `queue` (same app image, `php artisan queue:work`), `scheduler` (same app image, `php artisan schedule:work`), `mailpit` (profile `dev`, ports 8025/1025).
-- Entrypoint waits for DB, runs `php artisan migrate --force` (or `config:cache`, `route:cache`, `view:cache`), fixes storage perms.
-- `.env.example` at root for compose: DB_PASSWORD, APP_KEY, APP_ENV, APP_URL, MAIL_*.
-- MySQL root password from env; app user only gets its DB; no port 3306 published by default.
-- Docker healthchecks: mysqladmin ping; php-fpm `php artisan about`/cgi-fcgi or simple TCP; nginx `/healthz`.
+Services: `db` (postgres:16-alpine, volume, `pg_isready` healthcheck), `app` (php:8.2-fpm-alpine built from `docker/php/Dockerfile`, app code, composer deps, non-root, healthcheck), `web` (nginx:alpine multistage: build React with node:22-alpine → serve dist + proxy `/api` to app:9000, port 8080:80), `queue` (same app image, `php artisan queue:work`), `scheduler` (same app image, `php artisan schedule:work`), `mailpit` (profile `dev`, ports 8025/1025).
+- Entrypoint waits for PostgreSQL, runs `php artisan migrate --force` (or `config:cache`, `route:cache`, `view:cache`), fixes storage perms.
+- `.env.example` at root for compose: DB_PASSWORD, DB_SSLMODE, APP_KEY, APP_ENV, APP_URL, MAIL_*.
+- PostgreSQL credentials come from env; the app user only gets its DB; no port 5432 published by default.
+- Docker healthchecks: `pg_isready`; php-fpm TCP probe; nginx `/healthz`.
 - Frontend build: `VITE_API_BASE=/api` (relative, same-origin).
 
 ## 9. Definition of done (per module)
 
-- Migrations run clean from empty DB (`php artisan migrate:fresh`) on MariaDB **and** SQLite (tests).
+- Migrations run clean from empty DB (`php artisan migrate:fresh`) on PostgreSQL 16 **and** SQLite (fast tests); `phpunit.pgsql.xml` covers the PostgreSQL run.
 - FormRequests for every write; API Resources / serializers stable; no N+1 (eager load relations).
 - Feature tests cover happy path + auth + validation + authorization/IDOR + business-rule errors.
 - `php artisan test` green; `vendor/bin/pint --test` clean; no debug leftovers (`dd`, `dump`, `var_dump`, `console.log` in frontend except error handling).

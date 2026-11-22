@@ -59,6 +59,13 @@ CORS_ALLOWED_ORIGINS=https://YOUR-PROJECT.vercel.app
 CORS_SUPPORTS_CREDENTIALS=false
 SANCTUM_STATEFUL_DOMAINS=kjugarap.top
 SANCTUM_EXPIRATION=10080
+DB_CONNECTION=pgsql
+DB_HOST=127.0.0.1          # or your managed PostgreSQL host
+DB_PORT=5432
+DB_DATABASE=cpaneluser_omc
+DB_USERNAME=cpaneluser_omc
+DB_PASSWORD=
+DB_SSLMODE=prefer          # require for managed/remote PostgreSQL
 ```
 
 Verify: `https://kjugarap.top/omc-backend/api/health` → `{"data":{"status":"ok",...}}`.

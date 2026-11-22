@@ -73,8 +73,9 @@ class Store extends Model
         $term = trim($term);
 
         $query->where(function (Builder $query) use ($term): void {
-            $query->where('name', 'like', "%{$term}%")
-                ->orWhere('description', 'like', "%{$term}%");
+            // whereLike() is portable: PostgreSQL compiles ILIKE (case-insensitive).
+            $query->whereLike('name', "%{$term}%")
+                ->orWhereLike('description', "%{$term}%");
         });
     }
 

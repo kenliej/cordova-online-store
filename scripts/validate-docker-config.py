@@ -50,10 +50,14 @@ services = (compose or {}).get("services", {}) if isinstance(compose, dict) else
 check("compose defines the expected services", all(s in services for s in ("db", "app", "web", "queue", "scheduler", "mailpit")), ", ".join(services.keys()) or "none")
 
 db = services.get("db", {}) if isinstance(services, dict) else {}
+db_env = str(db.get("environment", {}))
 check("database port is not published to the host", not db.get("ports"), str(db.get("ports", [])))
-check("database image is pinned to a major version", bool(re.search(r"mysql:8\.4", str(db.get("image", "")))), str(db.get("image")))
+check("database image is PostgreSQL 16", bool(re.search(r"postgres:16", str(db.get("image", "")))), str(db.get("image")))
 check("database has a healthcheck", "healthcheck" in db)
-check("database root password comes from the environment", "MYSQL_ROOT_PASSWORD" in str(db.get("environment", {})) and "${" in str(db.get("environment", {})))
+check("healthcheck uses pg_isready", "pg_isready" in str(db.get("healthcheck", "")))
+check("POSTGRES_PASSWORD comes from the environment", "POSTGRES_PASSWORD" in db_env and "${" in db_env)
+check("POSTGRES_DB + POSTGRES_USER configured", "POSTGRES_DB" in db_env and "POSTGRES_USER" in db_env)
+check("database volume is the PostgreSQL data dir", "/var/lib/postgresql/data" in str(db.get("volumes", "")))
 
 app_env = str((services.get("app", {}) or {}).get("environment", ""))
 app_env_map = (services.get("app", {}) or {}).get("environment", {}) or {}
@@ -76,8 +80,11 @@ check("persistent volumes declared", all(v in (compose or {}).get("volumes", {})
 check("php Dockerfile pins PHP 8.2 fpm", "php:8.2-fpm" in php_dockerfile, "")
 check("composer install uses --no-dev", "--no-dev" in php_dockerfile)
 check("runtime image drops build dependencies", "apk del .build-deps" in php_dockerfile or "apk del" in php_dockerfile)
+check("app image installs pdo_pgsql", "pdo_pgsql" in php_dockerfile)
+check("app image does not install pdo_mysql", "pdo_mysql" not in php_dockerfile)
 check("app image has a healthcheck", "HEALTHCHECK" in php_dockerfile)
 check("entrypoint applies migrations", "migrate --force" in entrypoint)
+check("entrypoint waits for PostgreSQL", "pgsql:host=" in entrypoint)
 check("entrypoint refuses to start without APP_KEY", "APP_KEY is not set" in entrypoint)
 check("entrypoint warms caches in production", "artisan optimize" in entrypoint)
 check("php exposes no version", "expose_php = Off" in php_ini)
@@ -96,7 +103,9 @@ check("nginx Dockerfile copies security headers snippet", "security-headers.conf
 check(".dockerignore excludes backend/.env", "backend/.env" in dockerignore)
 check(".dockerignore excludes backend/vendor", "backend/vendor" in dockerignore)
 check(".env.example documents APP_KEY", "APP_KEY=" in root_env)
-check(".env.example documents DB passwords", "DB_PASSWORD=" in root_env and "DB_ROOT_PASSWORD=" in root_env)
+check(".env.example documents DB password + sslmode", "DB_PASSWORD=" in root_env and "DB_SSLMODE=" in root_env)
+check(".env.example documents PostgreSQL database", "DB_DATABASE=" in root_env)
+check("no MySQL root password left in compose", "DB_ROOT_PASSWORD" not in str((compose or {}).get("services", {})))
 
 failed = [c for c in checks if not c[1]]
 for name, ok, detail in checks:

@@ -36,8 +36,8 @@ class NotificationController extends Controller
 
         if ($search !== '') {
             $query->where(function ($builder) use ($search) {
-                $builder->where('title', 'like', '%'.$search.'%')
-                    ->orWhere('body', 'like', '%'.$search.'%');
+                $builder->whereLike('title', '%'.$search.'%')
+                    ->orWhereLike('body', '%'.$search.'%');
             });
         }
 

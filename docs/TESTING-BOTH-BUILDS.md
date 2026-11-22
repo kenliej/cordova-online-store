@@ -5,7 +5,7 @@ tests:
 
 | Shape | Frontend | Backend | Auth |
 |---|---|---|---|
-| **Docker / same-origin** | nginx serves the built SPA + proxies `/api` | php-fpm + MySQL | Sanctum session cookies |
+| **Docker / same-origin** | nginx serves the built SPA + proxies `/api` | php-fpm + PostgreSQL | Sanctum session cookies |
 | **cPanel + Vercel / split** | static SPA (Vercel or any static host) | Laravel under `/omc-backend` | Bearer tokens + CORS |
 
 The local test harness reproduces both shapes without Docker:
@@ -22,9 +22,66 @@ cPanel/Vercel-equivalent (simulated shared hosting):
 
 ---
 
+## 0. PostgreSQL for local testing
+
+The backend targets **PostgreSQL 16**. Pick one setup:
+
+### A) Installed PostgreSQL (recommended for development)
+
+- Install PostgreSQL 16 for your OS, enable `pdo_pgsql` in `php.ini`
+  (`extension=pdo_pgsql` on Windows XAMPP/Laragon, or the package for your distro).
+- Create the role + databases:
+
+  ```bash
+  psql -U postgres -c "CREATE ROLE onlinemall LOGIN PASSWORD 'your-password';"
+  psql -U postgres -c "CREATE DATABASE online_mall OWNER onlinemall;"
+  psql -U postgres -c "CREATE DATABASE online_mall_test OWNER onlinemall;"
+  ```
+
+- `backend/.env`: `DB_CONNECTION=pgsql`, `DB_HOST=127.0.0.1`, `DB_PORT=5432`,
+  `DB_DATABASE=online_mall`, `DB_USERNAME=onlinemall`, `DB_PASSWORD=...`,
+  `DB_SSLMODE=prefer`.
+
+### B) Portable binaries (no installer; used for the verification in this repo)
+
+Download the EnterpriseDB "binaries" zip (e.g. `postgresql-16.6-1-windows-x64-binaries.zip`),
+extract so `pg_ctl.exe` is at `.tools/pgsql/bin/pg_ctl.exe`, then:
+
+```powershell
+& .tools\pgsql\bin\initdb.exe -D .tools\pgdata -U postgres -A trust -E UTF8 --locale=C
+& .tools\pgsql\bin\pg_ctl.exe -D .tools\pgdata -l .tools\postgres-local.log `
+    -o "-p 5433 -c listen_addresses=127.0.0.1" start
+& .tools\pgsql\bin\psql.exe -h 127.0.0.1 -p 5433 -U postgres -c "CREATE ROLE onlinemall LOGIN PASSWORD 'onlinemall_dev_pw_2026';"
+& .tools\pgsql\bin\psql.exe -h 127.0.0.1 -p 5433 -U postgres -c "CREATE DATABASE online_mall OWNER onlinemall;"
+& .tools\pgsql\bin\psql.exe -h 127.0.0.1 -p 5433 -U postgres -c "CREATE DATABASE online_mall_test OWNER onlinemall;"
+```
+
+Set `backend/.env`: `DB_PORT=5433`, `DB_SSLMODE=disable`, same user/password.
+
+`scripts/test-e2e.ps1` auto-starts `.tools/pgsql/bin/pg_ctl` + `.tools/pgdata` when the port
+is not listening (override with `OMC_PG_CTL` / `OMC_PGDATA`). `scripts/test-pgsql.ps1` uses
+`OMC_PSQL` if set.
+
+If `pdo_pgsql` is not enabled globally, the test scripts pass
+`php -d extension=pdo_pgsql …` automatically.
+
+### Verify PostgreSQL specifically
+
+```powershell
+# migrations + demo data on PostgreSQL
+php -d extension=pdo_pgsql backend\artisan migrate:fresh --seed
+
+# full PHPUnit suite against PostgreSQL (online_mall_test)
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-pgsql.ps1
+```
+
+CI runs both the SQLite suite and the PostgreSQL suite (`phpunit.pgsql.xml`).
+
+---
+
 ## 1. One command (local, both builds, real browser)
 
-Requirements: PHP 8.2 + Laravel installed, Node.js, MySQL running, Google Chrome
+Requirements: PHP 8.2 + Laravel installed (`pdo_pgsql` enabled), Node.js, PostgreSQL 16 running, Google Chrome
 (or set `PLAYWRIGHT_CHANNEL=bundled` after `npx playwright install chromium`).
 
 ```powershell
@@ -166,7 +223,7 @@ proxies `/api`, `/sanctum`, `/storage` to the target set in `VITE_PROXY_TARGET`
 1. Start the Docker backend:
 
    ```bash
-   cp .env.example .env        # set APP_KEY, DB_PASSWORD, DB_ROOT_PASSWORD
+   cp .env.example .env        # set APP_KEY, DB_PASSWORD
    docker compose up -d --build
    docker compose exec app php artisan db:seed
    # health: http://localhost:8080/api/health
@@ -255,7 +312,7 @@ seeds the database, runs the `docker-same-origin` browser suite against
 Manual equivalent:
 
 ```bash
-cp .env.example .env        # set APP_KEY, DB_PASSWORD, DB_ROOT_PASSWORD
+cp .env.example .env        # set APP_KEY, DB_PASSWORD
 docker compose up -d --build
 docker compose exec app php artisan db:seed
 # wait for http://localhost:8080/api/health
@@ -296,7 +353,7 @@ frontend build + `npm audit`, then builds the Docker images and smoke-tests
 | Symptom | Fix |
 |---|---|
 | `php`/`node` not found | Add them to PATH; the harness reports this up front. |
-| MySQL not running | Start XAMPP MySQL, or set `OMC_MYSQLD_PATH` / `OMC_MYSQL_INI`. |
+| PostgreSQL not running | Start PostgreSQL; the runner auto-starts a portable server from `.tools/pgsql/bin/pg_ctl` + `.tools/pgdata`, or set `OMC_PG_CTL` / `OMC_PGDATA`. See "PostgreSQL for local testing" below. |
 | Browser launch fails | Install Chrome, or run `npx playwright install chromium` and set `PLAYWRIGHT_CHANNEL=bundled`. |
 | Ports busy | The harness kills listeners on 8000/8080/8091/8092 before starting. Other tools using them are stopped too. |
 | CORS errors in the split suite | The API must allow `http://127.0.0.1:8091` (`CORS_ALLOWED_ORIGINS`); requests must stay stateless (`SANCTUM_STATEFUL_DOMAINS` must not include `127.0.0.1:8091`). |

@@ -78,12 +78,18 @@ function Invoke-Native {
         [string[]]$Arguments = @(),
         [string]$WorkingDirectory = "",
         [int]$Tail = 0,
-        [string]$LogPath = ""
+        [string]$LogPath = "",
+        [hashtable]$EnvVars = @{}
     )
 
     $previous = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
     if (-not $WorkingDirectory) { $WorkingDirectory = $repo }
+    $savedEnv = @{}
+    foreach ($key in $EnvVars.Keys) {
+        $savedEnv[$key] = [Environment]::GetEnvironmentVariable($key, "Process")
+        [Environment]::SetEnvironmentVariable($key, [string]$EnvVars[$key], "Process")
+    }
     Push-Location $WorkingDirectory
     try {
         if ($LogPath) {
@@ -101,11 +107,48 @@ function Invoke-Native {
         }
         $code = $LASTEXITCODE
     } finally {
+        foreach ($key in $savedEnv.Keys) {
+            [Environment]::SetEnvironmentVariable($key, $savedEnv[$key], "Process")
+        }
         Pop-Location
         $ErrorActionPreference = $previous
     }
 
     return $code
+}
+
+function Get-PhpPgArgs {
+    $loaded = (& php -r "echo extension_loaded('pdo_pgsql') ? '1' : '0';" 2>$null) -join ''
+    if ($loaded.Trim() -eq '1') { return @() }
+    Write-Host "  pdo_pgsql is not enabled globally; using -d extension=pdo_pgsql for PHP commands." -ForegroundColor DarkGray
+    return @('-d', 'extension=pdo_pgsql')
+}
+
+function Test-PortOpen([string]$HostName, [int]$Port) {
+    try {
+        $client = New-Object System.Net.Sockets.TcpClient
+        $async = $client.BeginConnect($HostName, $Port, $null, $null)
+        if (-not $async.AsyncWaitHandle.WaitOne(1500)) { $client.Close(); return $false }
+        $client.EndConnect($async)
+        $client.Close()
+        return $true
+    } catch {
+        return $false
+    }
+}
+
+function Get-DotEnvValue([string]$Path, [string]$Key) {
+    if (-not (Test-Path $Path)) { return $null }
+    foreach ($line in Get-Content -LiteralPath $Path) {
+        if ($line -match ('^\s*' + [regex]::Escape($Key) + '\s*=\s*(.*)$')) {
+            $value = $matches[1].Trim()
+            if ($value.StartsWith('"') -and $value.EndsWith('"') -and $value.Length -ge 2) {
+                $value = $value.Substring(1, $value.Length - 2)
+            }
+            return $value
+        }
+    }
+    return $null
 }
 
 function Stop-Port([int]$Port) {
@@ -219,29 +262,49 @@ $nodeCommand = Get-Command node -ErrorAction SilentlyContinue
 Record-Result "Node.js available" ($null -ne $nodeCommand) "node not found in PATH"
 if (-not $phpCommand -or -not $nodeCommand) { throw "PHP and Node.js are required." }
 $npm = Get-NpmPath
+$script:phpArgs = Get-PhpPgArgs
+$backendDir = Join-Path $repo "backend"
+$envFile = Join-Path $backendDir ".env"
 
 $router = Join-Path $repo "backend\vendor\laravel\framework\src\Illuminate\Foundation\resources\server.php"
 Record-Result "Laravel installed (vendor/)" ((Test-Path $router) -and (Test-Path (Join-Path $repo "backend\artisan"))) "Run composer install in backend/"
 
-# MySQL
-$dbListening = $null -ne (Get-NetTCPConnection -State Listen -LocalPort 3306 -ErrorAction SilentlyContinue)
+# PostgreSQL (configured in backend/.env)
+$dbDriver = Get-DotEnvValue $envFile "DB_CONNECTION"
+if (-not $dbDriver) { $dbDriver = "pgsql" }
+$dbHost = Get-DotEnvValue $envFile "DB_HOST"
+if (-not $dbHost) { $dbHost = "127.0.0.1" }
+$dbPortText = Get-DotEnvValue $envFile "DB_PORT"
+if (-not $dbPortText) { $dbPortText = "5432" }
+$dbPort = [int]$dbPortText
+$dbName = Get-DotEnvValue $envFile "DB_DATABASE"
+if (-not $dbName) { $dbName = "online_mall" }
+$dbUser = Get-DotEnvValue $envFile "DB_USERNAME"
+$dbPassword = Get-DotEnvValue $envFile "DB_PASSWORD"
+$dbSslMode = Get-DotEnvValue $envFile "DB_SSLMODE"
+if (-not $dbSslMode) { $dbSslMode = "prefer" }
+
+Record-Result "Backend configured for PostgreSQL" ($dbDriver -eq "pgsql") "backend/.env: DB_CONNECTION=$dbDriver"
+if ($dbDriver -ne "pgsql") { throw "This test runner expects PostgreSQL (DB_CONNECTION=pgsql in backend/.env)." }
+
+$dbListening = Test-PortOpen $dbHost $dbPort
 if (-not $dbListening) {
-    $mysqld = $env:OMC_MYSQLD_PATH
-    if (-not $mysqld) { $mysqld = "C:\xampp\mysql\bin\mysqld.exe" }
-    $myini = $env:OMC_MYSQL_INI
-    if (-not $myini) { $myini = "C:\xampp\mysql\bin\my.ini" }
-    if ((Test-Path $mysqld) -and (Test-Path $myini)) {
-        Write-Host "  starting MySQL ($mysqld)..." -ForegroundColor DarkGray
-        Start-Process -FilePath $mysqld -ArgumentList "--defaults-file=$myini" -WindowStyle Hidden | Out-Null
+    $pgCtl = $env:OMC_PG_CTL
+    if (-not $pgCtl) { $pgCtl = Join-Path $repo ".tools\pgsql\bin\pg_ctl.exe" }
+    $pgData = $env:OMC_PGDATA
+    if (-not $pgData) { $pgData = Join-Path $repo ".tools\pgdata" }
+    $pgLog = Join-Path $repo ".tools\postgres-local.log"
+    if ((Test-Path $pgCtl) -and (Test-Path $pgData)) {
+        Write-Host "  starting local PostgreSQL ($pgCtl)..." -ForegroundColor DarkGray
+        $arguments = "-D `"$pgData`" -l `"$pgLog`" -o `"-p $dbPort -c listen_addresses=$dbHost`" start"
+        Start-Process -FilePath $pgCtl -ArgumentList $arguments -WindowStyle Hidden | Out-Null
         $deadline = (Get-Date).AddSeconds(40)
-        while (-not (Get-NetTCPConnection -State Listen -LocalPort 3306 -ErrorAction SilentlyContinue) -and (Get-Date) -lt $deadline) {
-            Start-Sleep -Milliseconds 500
-        }
-        $dbListening = $null -ne (Get-NetTCPConnection -State Listen -LocalPort 3306 -ErrorAction SilentlyContinue)
+        while (-not (Test-PortOpen $dbHost $dbPort) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 500 }
+        $dbListening = Test-PortOpen $dbHost $dbPort
     }
 }
-Record-Result "MySQL listening on 127.0.0.1:3306" $dbListening "Start MySQL/XAMPP, or set OMC_MYSQLD_PATH/OMC_MYSQL_INI."
-if (-not $dbListening) { throw "MySQL is required for integration/E2E tests." }
+Record-Result "PostgreSQL listening on ${dbHost}:${dbPort}" $dbListening "Start PostgreSQL, or set OMC_PG_CTL/OMC_PGDATA (see docs/TESTING-BOTH-BUILDS.md)."
+if (-not $dbListening) { throw "PostgreSQL is required for integration/E2E tests." }
 
 # Clean any stale dev servers from previous runs.
 foreach ($port in @(8000, 8080, 8091, 8092)) { Stop-Port $port }
@@ -251,23 +314,65 @@ $splitSucceeded = $false
 
 try {
     # -----------------------------------------------------------------------
-    Write-Section "1. Backend test suite (PHPUnit, SQLite memory)"
+    Write-Section "1. Backend test suite (SQLite memory + PostgreSQL 16)"
     # -----------------------------------------------------------------------
     if ($SkipBackendTests) {
         Write-Host "  skipped (-SkipBackendTests)" -ForegroundColor Yellow
     } else {
-        $log = Join-Path $logDir "backend-tests.log"
-        $code = Invoke-Native -FilePath "php" -Arguments @("artisan", "test") -WorkingDirectory (Join-Path $repo "backend") -Tail 6 -LogPath $log
-        Record-Result "Backend test suite" ($code -eq 0) "See $log"
+        $log = Join-Path $logDir "backend-tests-sqlite.log"
+        $code = Invoke-Native -FilePath "php" -Arguments (@($script:phpArgs) + @("artisan", "test")) -WorkingDirectory $backendDir -Tail 6 -LogPath $log
+        Record-Result "Backend test suite (SQLite)" ($code -eq 0) "See $log"
+
+        # PostgreSQL suite: needs a separate test database + psql client.
+        $psql = $env:OMC_PSQL
+        if (-not $psql) {
+            $candidate = Join-Path $repo ".tools\pgsql\bin\psql.exe"
+            if (Test-Path $candidate) { $psql = $candidate }
+        }
+        if (-not $psql) {
+            $psqlCommand = Get-Command psql -ErrorAction SilentlyContinue
+            if ($psqlCommand) { $psql = $psqlCommand.Source }
+        }
+
+        if ($psql) {
+            $pgTestDb = "online_mall_test"
+            $previousPgpPassword = $env:PGPASSWORD
+            $env:PGPASSWORD = $dbPassword
+            try {
+                $exists = (& $psql -h $dbHost -p $dbPort -U $dbUser -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname = '$pgTestDb'" 2>$null) -join ''
+                if ($exists.Trim() -ne '1') {
+                    & $psql -h $dbHost -p $dbPort -U $dbUser -d postgres -c "CREATE DATABASE \"$pgTestDb\"" 2>&1 | Out-Null
+                }
+            } finally {
+                if ($null -eq $previousPgpPassword) { Remove-Item Env:PGPASSWORD -ErrorAction SilentlyContinue }
+                else { $env:PGPASSWORD = $previousPgpPassword }
+            }
+
+            $pgLog = Join-Path $logDir "backend-tests-postgres.log"
+            $pgCode = Invoke-Native -FilePath "php" `
+                -Arguments (@($script:phpArgs) + @("vendor/bin/phpunit", "-c", "phpunit.pgsql.xml")) `
+                -WorkingDirectory $backendDir -Tail 4 -LogPath $pgLog `
+                -EnvVars @{
+                    DB_CONNECTION = "pgsql";
+                    DB_HOST = $dbHost;
+                    DB_PORT = "$dbPort";
+                    DB_DATABASE = $pgTestDb;
+                    DB_USERNAME = $dbUser;
+                    DB_PASSWORD = $dbPassword;
+                    DB_SSLMODE = $dbSslMode;
+                }
+            Record-Result "Backend test suite (PostgreSQL)" ($pgCode -eq 0) "See $pgLog"
+        } else {
+            Write-Host "  psql not found - skipping the PostgreSQL test suite (set OMC_PSQL to the psql executable)." -ForegroundColor Yellow
+        }
     }
 
     # -----------------------------------------------------------------------
     Write-Section "2. Reset demo database (deterministic E2E data)"
     # -----------------------------------------------------------------------
-    $backendDir = Join-Path $repo "backend"
-    Invoke-Native -FilePath "php" -Arguments @("artisan", "config:clear") -WorkingDirectory $backendDir | Out-Null
-    $resetCode = Invoke-Native -FilePath "php" -Arguments @("artisan", "migrate:fresh", "--seed", "--force") -WorkingDirectory $backendDir -Tail 4
-    Invoke-Native -FilePath "php" -Arguments @("artisan", "cache:clear") -WorkingDirectory $backendDir | Out-Null
+    Invoke-Native -FilePath "php" -Arguments (@($script:phpArgs) + @("artisan", "config:clear")) -WorkingDirectory $backendDir | Out-Null
+    $resetCode = Invoke-Native -FilePath "php" -Arguments (@($script:phpArgs) + @("artisan", "migrate:fresh", "--seed", "--force")) -WorkingDirectory $backendDir -Tail 4
+    Invoke-Native -FilePath "php" -Arguments (@($script:phpArgs) + @("artisan", "cache:clear")) -WorkingDirectory $backendDir | Out-Null
     Record-Result "Demo database reset + seeded" ($resetCode -eq 0)
 
     # -----------------------------------------------------------------------
@@ -291,7 +396,7 @@ try {
     Write-Section "4. Start local backends"
     # -----------------------------------------------------------------------
     $publicDir = Join-Path $repo "backend\public"
-    Start-Server -Name "laravel-same-origin" -FilePath "php" -Arguments @("-S", "127.0.0.1:8000", "-t", $publicDir, $router) -WorkingDirectory $publicDir -EnvVars @{
+    Start-Server -Name "laravel-same-origin" -FilePath "php" -Arguments (@($script:phpArgs) + @("-S", "127.0.0.1:8000", "-t", $publicDir, $router)) -WorkingDirectory $publicDir -EnvVars @{
         APP_ENV = "local";
         APP_DEBUG = "true";
         APP_URL = "http://127.0.0.1:8080";
@@ -300,7 +405,7 @@ try {
         CORS_ALLOWED_ORIGINS = "http://127.0.0.1:8080,http://127.0.0.1:5173";
     } | Out-Null
 
-    Start-Server -Name "laravel-cpanel-sim" -FilePath "php" -Arguments @("-S", "127.0.0.1:8092", "-t", $publicDir, (Join-Path $repo "scripts\cpanel-subdir-sim.php")) -WorkingDirectory $repo -EnvVars @{
+    Start-Server -Name "laravel-cpanel-sim" -FilePath "php" -Arguments (@($script:phpArgs) + @("-S", "127.0.0.1:8092", "-t", $publicDir, (Join-Path $repo "scripts\cpanel-subdir-sim.php"))) -WorkingDirectory $repo -EnvVars @{
         APP_ENV = "production";
         APP_DEBUG = "false";
         APP_URL = "http://127.0.0.1:8092/omc-backend";

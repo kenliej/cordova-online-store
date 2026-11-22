@@ -44,14 +44,14 @@ if [ "$SKIP_BUILD" -eq 0 ]; then
   if command -v rsync >/dev/null 2>&1; then
     rsync -a \
       --exclude vendor --exclude node_modules --exclude tests --exclude storage \
-      --exclude .git --exclude .env --exclude '.env.*' --exclude phpunit.xml \
+      --exclude .git --exclude .env --exclude '.env.*' --exclude 'phpunit*.xml' \
       --exclude .phpunit.result.cache --exclude .phpunit.cache --exclude '*.log' \
       --exclude '*.zip' --exclude '*.tar.gz' --exclude 'database/*.sqlite*' \
       "$BACKEND/" "$STAGE/"
   else
     (cd "$BACKEND" && tar \
       --exclude=vendor --exclude=node_modules --exclude=tests --exclude=storage \
-      --exclude=.git --exclude=.env --exclude='.env.*' --exclude=phpunit.xml \
+      --exclude=.git --exclude=.env --exclude='.env.*' --exclude='phpunit*.xml' \
       --exclude=.phpunit.result.cache --exclude=.phpunit.cache --exclude='*.log' \
       --exclude='*.zip' --exclude='*.tar.gz' --exclude='database/*.sqlite*' \
       -cf - .) | (cd "$STAGE" && tar -xf -)

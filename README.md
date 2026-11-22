@@ -3,9 +3,9 @@
 Full-stack "order online, pay & claim at the mall" application:
 
 - **Frontend** — React 19 + TypeScript + Vite + Tailwind CSS 4 (pre-existing UI, now fully API-driven)
-- **Backend** — Laravel 12 API with MySQL, Sanctum SPA-cookie authentication, role-based access (guest / customer / worker / admin)
-- **Database** — MySQL 8.4 in Docker (MariaDB 10.4 compatible for local dev), migrations + demo seeders
-- **Docker** — nginx (SPA + API proxy), php-fpm 8.2, MySQL, queue worker, scheduler, Mailpit
+- **Backend** — Laravel 12 API with PostgreSQL, Sanctum SPA-cookie authentication, role-based access (guest / customer / worker / admin)
+- **Database** — PostgreSQL 16 in Docker (SQLite in-memory for the fast test suite), migrations + demo seeders
+- **Docker** — nginx (SPA + API proxy), php-fpm 8.2, PostgreSQL 16, queue worker, scheduler, Mailpit
 
 ---
 
@@ -76,7 +76,7 @@ security headers, Docker hardening and an OWASP audit report (`docs/SECURITY_AUD
 
 ```
 Browser ──► nginx :8080 ──┬─► /                React SPA (built assets)
-                          ├─► /api/*, /sanctum  php-fpm :9000  ──► MySQL :3306
+                          ├─► /api/*, /sanctum  php-fpm :9000  ──► PostgreSQL :5432
                           └─► /storage/*        uploaded images (shared volume)
 
 queue worker ──► php artisan queue:work (database queue)
@@ -87,7 +87,7 @@ mailpit      ──► SMTP sink + web UI :8025 (password resets)
 | Layer | Technology |
 |---|---|
 | API | PHP 8.2, Laravel 12.73, Laravel Sanctum (SPA cookie auth) |
-| Database | MySQL 8.4 (Docker) / MariaDB 10.4 (local XAMPP) |
+| Database | PostgreSQL 16 (Docker / local) — SQLite `:memory:` for fast tests |
 | Web server | nginx 1.27 + php-fpm 8.2 |
 | Frontend | React 19.3, TypeScript 6.0, Vite 8.3, Tailwind CSS 4, axios 1.21, lucide-react |
 | Tooling | Composer 2, npm 10, PHPUnit 11, Laravel Pint |
@@ -111,7 +111,7 @@ cp .env.example .env
 php -r "echo 'base64:'.base64_encode(random_bytes(32)).PHP_EOL;"
 #    (no PHP? docker run --rm php:8.2-cli php -r "echo 'base64:'.base64_encode(random_bytes(32)), PHP_EOL;")
 
-# 3. Set strong database passwords in .env (DB_PASSWORD, DB_ROOT_PASSWORD)
+# 3. Set strong database credentials in .env (DB_PASSWORD; used to create the PostgreSQL user)
 
 # 4. Build and start the whole stack
 docker compose up -d --build
@@ -139,7 +139,7 @@ docker compose logs -f app          # API logs
 docker compose logs -f web          # nginx logs
 docker compose exec app php artisan migrate:fresh --seed   # reset demo data
 docker compose exec app php artisan test                   # backend tests
-docker compose exec db mysqldump -u root -p"$DB_ROOT_PASSWORD" online_mall > backup.sql
+docker compose exec db pg_dump -U "$DB_USERNAME" "$DB_DATABASE" > backup.sql
 docker compose down                 # stop (keep data)
 docker compose down -v              # stop and delete volumes
 ```
@@ -155,14 +155,14 @@ docker compose down -v              # stop and delete volumes
 
 Tested on Windows with XAMPP; adapt paths for Linux/macOS.
 
-Requirements: PHP 8.2+ with `pdo_mysql`, Composer 2, Node 20.19+/22+, MySQL or MariaDB.
+Requirements: PHP 8.2+ with `pdo_pgsql`, Composer 2, Node 20.19+/22+, PostgreSQL 16+.
 
 ```bash
-# --- Database -------------------------------------------------------------
-# Start MySQL, then:
-mysql -u root -e "CREATE DATABASE online_mall CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
-mysql -u root -e "CREATE USER 'onlinemall'@'localhost' IDENTIFIED BY 'your-password'; \
-                  GRANT ALL ON online_mall.* TO 'onlinemall'@'localhost'; FLUSH PRIVILEGES;"
+# --- PostgreSQL -----------------------------------------------------------
+# Connect as a superuser (psql -U postgres), then:
+psql -U postgres -c "CREATE ROLE onlinemall LOGIN PASSWORD 'your-password';"
+psql -U postgres -c "CREATE DATABASE online_mall OWNER onlinemall;"
+psql -U postgres -c "CREATE DATABASE online_mall_test OWNER onlinemall;"
 
 # --- Backend --------------------------------------------------------------
 cd backend
@@ -409,7 +409,7 @@ Full guide, flags, manual browsing URLs, CI snippets and troubleshooting:
 - **Logs:** `docker compose logs -f app` (Laravel logs to stderr in Docker, daily files locally).
 - **Queue:** database queue; `docker compose logs -f queue`.
 - **Scheduler:** `orders:mark-unclaimed` hourly; run `php artisan schedule:list` to confirm.
-- **Backups:** `docker compose exec db mysqldump -u root -p"$DB_ROOT_PASSWORD" online_mall > backup.sql`;
+- **Backups:** `docker compose exec db pg_dump -U "$DB_USERNAME" "$DB_DATABASE" > backup.sql`;
   uploads are in the `app_storage` volume.
 - **Scaling:** stateless php-fpm + shared DB/storage; run multiple `app`/`queue` replicas
   behind a load balancer; `SESSION_DRIVER=database` and `CACHE_STORE=database` are shared.
@@ -434,15 +434,17 @@ Full guide, flags, manual browsing URLs, CI snippets and troubleshooting:
 │  └─ vercel/env.example
 ├─ docker/
 │  ├─ php/{Dockerfile,php.ini,entrypoint.sh}
-│  ├─ nginx/{Dockerfile,default.conf,security-headers.conf}
-│  └─ mysql/init/
+│  └─ nginx/{Dockerfile,default.conf,security-headers.conf}
 ├─ docs/
 │  ├─ BACKEND_ARCHITECTURE.md       API + DB + security contract
 │  ├─ FRONTEND_CONTRACT.md          UI inventory and mock data
 │  ├─ API.md                        endpoint reference (cookie + token auth)
 │  ├─ DEPLOYMENT-CPANEL-VERCEL.md   split-origin deployment guide
+│  ├─ UPLOAD-ARTIFACTS.md           what to upload to cPanel/Vercel
+│  ├─ TESTING-BOTH-BUILDS.md        Docker + cPanel build test guide
 │  └─ SECURITY_AUDIT.md             OWASP audit + recheck
-├─ scripts/{smoke-test.ps1,cpanel-subdir-sim.php}
+├─ scripts/{smoke-test.ps1,smoke-test-token.ps1,test-e2e.ps1,test-pgsql.ps1,...}
+├─ tests/e2e/                 Playwright browser tests (both build shapes)
 ├─ vercel.json                Vercel SPA rewrites + security headers
 ├─ docker-compose.yml
 ├─ .env.example
@@ -456,9 +458,9 @@ Full guide, flags, manual browsing URLs, CI snippets and troubleshooting:
 - **Docker was not runnable in the development environment** used to build this project
   (no Docker engine available). All images, the compose stack, nginx/php-fpm configs and
   entrypoint were validated statically (`docker compose` YAML parse, `bash -n`, config
-  review), and the identical application was verified locally with PHP 8.2 + MySQL +
-  `php artisan serve`. Run `docker compose up -d --build` on a Docker-capable machine for
-  the runtime check; CI performs the same build + `/api/health` smoke test.
+  review), and the identical application was verified locally with PHP 8.2 + PostgreSQL 16 +
+  the built-in server. Run `docker compose up -d --build` on a Docker-capable machine for
+  the runtime check; CI builds the images and smoke-tests `/api/health`.
 - **TypeScript is pinned to `~6.0.3`** (from `~7.0.2`): `typescript-eslint@8` refuses to
   load against TypeScript 7, so `npm run lint` could not work at all. Build and lint are
   green with 6.0.3. The upstream `package-lock.json` also had an unresolvable peer
@@ -472,8 +474,11 @@ Full guide, flags, manual browsing URLs, CI snippets and troubleshooting:
 - **The contact-form captcha is a UI affordance only**; server-side protection is the
   honeypot field + 3/hour/IP throttle. Integrate reCAPTCHA/hCaptcha server verification
   before exposing the form publicly.
-- **No browser automation** was available, so visual/E2E browser checks were limited to the
-  production build plus live HTTP verification of every endpoint; the UI markup/classes
-  were deliberately preserved.
-- Local MariaDB (XAMPP) differs slightly from MySQL 8.4 in Docker; migrations are portable
-  and are exercised on both.
+- **Browser tests exist now**: Playwright drives the built SPA for both deployment shapes
+  (Docker/same-origin cookie auth and cPanel/split Bearer+CORS) — see
+  [`docs/TESTING-BOTH-BUILDS.md`](docs/TESTING-BOTH-BUILDS.md). Visual design was preserved;
+  screenshots/traces are captured on failure.
+- PostgreSQL 16 is the supported database (Docker and local). The migrations are portable to
+  SQLite (used for the fast test suite); PostgreSQL-specific behaviour (enums as checked
+  varchar, case-insensitive `whereLike` → `ILIKE`, `json` metadata) is covered by
+  `phpunit.pgsql.xml` / `scripts/test-pgsql.ps1` and CI.

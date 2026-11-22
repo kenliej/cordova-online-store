@@ -24,7 +24,9 @@ cPanel backend - steps
    Select -> Extract. Result: /home/CPANEL_USER/omc-backend
 2. Upload cpanel/public_html-omc-backend.zip to /home/CPANEL_USER/public_html/
    Select -> Extract. Result: public_html/omc-backend/{index.php,.htaccess}
-3. Create the MySQL database + user in cPanel (MySQL Databases).
+3. Create the PostgreSQL database + user (cPanel > PostgreSQL Databases if
+   enabled, otherwise a managed PostgreSQL instance - see
+   docs/DEPLOYMENT-CPANEL-VERCEL.md). Note the connection details.
 4. Copy cpanel/env.example to /home/CPANEL_USER/omc-backend/.env and fill in:
    APP_KEY (generate), DB_*, APP_URL, APP_FRONTEND_URL, CORS_ALLOWED_ORIGINS,
    TRUSTED_HOSTS, MAIL_*.

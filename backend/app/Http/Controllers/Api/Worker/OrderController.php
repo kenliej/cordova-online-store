@@ -42,8 +42,8 @@ class OrderController extends Controller
 
         if ($search !== '') {
             $query->where(function ($builder) use ($search) {
-                $builder->where('order_number', 'like', '%'.$search.'%')
-                    ->orWhereHas('user', fn ($userQuery) => $userQuery->where('name', 'like', '%'.$search.'%'));
+                $builder->whereLike('order_number', '%'.$search.'%')
+                    ->orWhereHas('user', fn ($userQuery) => $userQuery->whereLike('name', '%'.$search.'%'));
             });
         }
 

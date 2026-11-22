@@ -126,7 +126,7 @@ if (-not $SkipBuild) {
     New-Item -ItemType Directory -Path $stage -Force | Out-Null
 
     $excludeDirs = @("vendor", "node_modules", "tests", "storage", ".git", ".github")
-    $excludeFiles = @("phpunit.xml", ".phpunit.result.cache", ".phpunit.cache", "composer.phar", "*.log", "*.zip", "*.tar", "*.gz")
+    $excludeFiles = @("phpunit*.xml", ".phpunit.result.cache", ".phpunit.cache", "composer.phar", "*.log", "*.zip", "*.tar", "*.gz")
     $arguments = @($backend, $stage, "/E", "/NFL", "/NDL", "/NJH", "/NJS", "/NP", "/R:1", "/W:1", "/XD")
     $arguments += $excludeDirs | ForEach-Object { Join-Path $backend $_ }
     $arguments += "/XF"
