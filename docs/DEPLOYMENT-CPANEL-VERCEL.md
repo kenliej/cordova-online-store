@@ -62,30 +62,35 @@ Choose **one** of these three options. If cPanel Terminal says
 `composer: command not found` (very common on shared hosting), use Option A or B —
 you don't need Composer on the server at all.
 
-#### Option A — build the package on your computer (recommended, no server Composer)
+#### Option A — build the deployment artifacts on your computer (recommended, no server Composer)
 
-This repository includes a packaging script that runs `composer install --no-dev`
-locally and produces a zip/tar.gz with `vendor/` already inside:
+One command builds **both** uploads (cPanel app + Vercel static SPA); Composer and
+Node are only needed on your machine:
 
 ```powershell
 # Windows (from the repo root)
-powershell -ExecutionPolicy Bypass -File scripts/package-cpanel.ps1
+npm run package:deploy
+# or: powershell -ExecutionPolicy Bypass -File scripts/package-cpanel.ps1
 ```
 
 ```bash
-# macOS / Linux (from the repo root)
+# macOS / Linux
 ./scripts/package-cpanel.sh
 ```
 
-Output: `dist-cpanel/omc-backend.zip` (~8 MB, plus `.tar.gz`). Then in cPanel
-*File Manager*:
+Output in `dist-deploy/`:
 
-1. Upload `omc-backend.zip` to `/home/CPANEL_USER/`.
-2. Select it → **Extract** → this creates `/home/CPANEL_USER/omc-backend/` with
-   `vendor/` inside.
+| Artifact | Purpose |
+|---|---|
+| `cpanel/omc-backend.zip` | Laravel app **with production `vendor/`** → upload to `/home/CPANEL_USER/` and extract |
+| `cpanel/public_html-omc-backend.zip` | web-root shim (`index.php` + `.htaccess`) → upload to `/home/CPANEL_USER/public_html/` and extract |
+| `cpanel/env.example`, `cpanel/CRON.txt` | copy/edit on the server |
+| `vercel/` + `vercel.zip` | prebuilt static SPA (API URL already baked in) |
+| `cpanel/UPLOAD-INSTRUCTIONS.txt` | step-by-step checklist |
 
-The package contains production dependencies only (no tests/dev packages) and no local
-`.env`, `.phpunit` cache, SQLite file or uploads/logs.
+The app package contains production dependencies only (no tests/dev packages) and no
+local `.env`, `.phpunit` cache, SQLite file or uploads/logs. Details:
+[`UPLOAD-ARTIFACTS.md`](UPLOAD-ARTIFACTS.md).
 
 #### Option B — install Composer in your cPanel home directory (no root needed)
 

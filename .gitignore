@@ -71,6 +71,7 @@ docker/mysql/data
 dist-cpanel/
 dist-cpanel-frontend/
 dist-e2e-split/
+dist-deploy/
 backend/*.zip
 test-results/
 

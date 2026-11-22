@@ -150,12 +150,60 @@ node scripts/serve-static.mjs 8091 dist-e2e-split
 
 ## 4. Test the frontend against a local / same-origin backend
 
+### 4a. `php artisan serve` + Vite dev (simplest)
+
 ```bash
 cd backend && php artisan serve --host=127.0.0.1 --port=8000
 npm run dev                               # http://localhost:5173 (Vite proxy, cookie auth)
 ```
 
-Production-like same-origin test (simulated nginx, what Docker serves):
+### 4b. Backend in **Docker**, frontend **locally** (Vite dev)
+
+This is the "backend containerized, UI on my machine" workflow. The Vite dev server
+proxies `/api`, `/sanctum`, `/storage` to the target set in `VITE_PROXY_TARGET`
+(default `http://127.0.0.1:8000`).
+
+1. Start the Docker backend:
+
+   ```bash
+   cp .env.example .env        # set APP_KEY, DB_PASSWORD, DB_ROOT_PASSWORD
+   docker compose up -d --build
+   docker compose exec app php artisan db:seed
+   # health: http://localhost:8080/api/health
+   ```
+
+2. In `.env` (compose reads it) allow the Vite dev origin for Sanctum cookies:
+
+   ```dotenv
+   SANCTUM_STATEFUL_DOMAINS=localhost:8080,127.0.0.1:8080,localhost:5173,127.0.0.1:5173
+   CORS_ALLOWED_ORIGINS=http://localhost:8080,http://127.0.0.1:8080,http://localhost:5173,http://127.0.0.1:5173
+   ```
+
+   Apply with `docker compose up -d --force-recreate app`.
+
+3. Run the local frontend against the Docker nginx origin (cookie auth through the
+   Vite proxy, so it behaves like the production same-origin build):
+
+   ```powershell
+   $env:VITE_PROXY_TARGET="http://127.0.0.1:8080"
+   npm run dev
+   # http://127.0.0.1:5173 — login, products, cart, admin/worker dashboards
+   ```
+
+   (macOS/Linux: `VITE_PROXY_TARGET=http://127.0.0.1:8080 npm run dev`)
+
+4. Optional browser check for this exact setup:
+
+   ```powershell
+   $env:PLAYWRIGHT_CHANNEL="chrome"
+   npm run test:e2e:vite     # login + cart through the proxy chain
+   ```
+
+> Verified locally with the same topology via `scripts/serve-docker-sim.mjs`
+> (nginx equivalent): 2/2 Playwright tests pass, including cookie login and
+> add-to-cart through the proxy.
+
+### 4c. Production-like same-origin without Docker (simulated nginx)
 
 ```bash
 npm run build
@@ -167,7 +215,30 @@ Start the Laravel side with `APP_URL=http://127.0.0.1:8080` (and
 `SANCTUM_STATEFUL_DOMAINS` containing `127.0.0.1:8080`) so generated URLs and
 cookies match the browser origin — `scripts/test-e2e.ps1` does this automatically.
 
+### 4d. Build and locally test the exact cPanel and Vercel upload artifacts
+
+```powershell
+npm run package:deploy
+# dist-deploy/cpanel/omc-backend.zip
+# dist-deploy/cpanel/public_html-omc-backend.zip
+# dist-deploy/vercel/ + vercel.zip
+```
+
+Verify before uploading:
+
+```powershell
+node scripts/serve-static.mjs 8093 dist-deploy/vercel
+# open http://127.0.0.1:8093/ and http://127.0.0.1:8093/products (SPA fallback)
+
+# cPanel app package: extract to a temp dir, copy backend/.env in, then:
+php artisan --version
+php artisan route:list --path=api
+```
+
+Full upload checklist: [`UPLOAD-ARTIFACTS.md`](UPLOAD-ARTIFACTS.md).
+
 ---
+
 
 ## 5. Docker build on a Docker-capable machine
 

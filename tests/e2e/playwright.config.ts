@@ -15,6 +15,7 @@ import { defineConfig } from "@playwright/test";
  */
 const sameOriginURL = process.env.E2E_SAME_ORIGIN_URL || "http://127.0.0.1:8080";
 const splitOriginURL = process.env.E2E_SPLIT_ORIGIN_URL || "http://127.0.0.1:8091";
+const viteDevURL = process.env.E2E_VITE_URL || "http://127.0.0.1:5173";
 
 const channel = process.env.PLAYWRIGHT_CHANNEL ?? "chrome";
 const browserOptions = channel === "bundled" ? {} : { channel };
@@ -47,6 +48,13 @@ export default defineConfig({
       name: "cpanel-split",
       testMatch: /split-origin\.spec\.ts/,
       use: { baseURL: splitOriginURL },
+    },
+    {
+      // Manual mode: `npm run dev` with VITE_PROXY_TARGET pointing at the
+      // Docker (nginx) backend, e.g. http://localhost:8080.
+      name: "vite-dev",
+      testMatch: /vite-dev\.spec\.ts/,
+      use: { baseURL: viteDevURL },
     },
   ],
 });
