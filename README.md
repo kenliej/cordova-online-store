@@ -21,9 +21,10 @@ Full-stack "order online, pay & claim at the mall" application:
 8. [Database](#database)
 9. [Security controls](#security-controls)
 10. [Testing & verification](#testing--verification)
-11. [Operations](#operations)
-12. [Project layout](#project-layout)
-13. [Known limitations / notes](#known-limitations--notes)
+11. [Testing both builds (Docker + cPanel/Vercel)](#testing-both-builds-docker--cpanelvercel)
+12. [Operations](#operations)
+13. [Project layout](#project-layout)
+14. [Known limitations / notes](#known-limitations--notes)
 
 ---
 
@@ -362,6 +363,39 @@ password-reset poisoning issue). Details, evidence and the recheck log:
 
 CI (`.github/workflows/ci.yml`) runs the backend tests + Pint + `composer audit`,
 the frontend build + `npm audit`, and builds the Docker images with a health smoke test.
+
+---
+
+## Testing both builds (Docker + cPanel/Vercel)
+
+Both deployment shapes are tested end-to-end, including **real browser tests**
+(Playwright driving system Chrome, no browser download needed locally):
+
+```powershell
+# Windows PowerShell — backend suite + both builds + both browser suites + Docker checks
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-e2e.ps1
+# or: npm run test:e2e:local
+```
+
+What it verifies:
+
+| Build | How it is served locally | Browser tests |
+|---|---|---|
+| **Docker / same-origin** | built SPA on `:8080` + Node proxy to Laravel `:8000` (nginx equivalent) | guest catalogue/deep links, cookie session, cart→checkout→cancel, admin private ID scans, worker tabs, logout guard |
+| **cPanel + Vercel / split** | split SPA on `:8091` calling `http://127.0.0.1:8092/omc-backend/api` (Bearer + CORS) | same flows over tokens, token storage + `Authorization: Bearer` asserted, cross-origin ID scans, CORS-free console |
+
+- If a Docker engine is available, the script builds/starts the real compose stack
+  and runs the same-origin browser suite against `http://localhost:8080`; otherwise
+  it runs 38 static Docker configuration checks (`scripts/validate-docker-config.py`).
+- Test your **real cPanel backend** without a browser:
+  `scripts/smoke-test-token.ps1 -BaseUrl https://kjugarap.top/omc-backend -Origin https://your-app.vercel.app`
+  (read-only by default, `-Full` also tests cart/checkout/cancel).
+- Point the split frontend at a real backend: `npm run build:cpanel`
+  (`https://kjugarap.top/omc-backend/api` from `.env.cpanel`), then
+  `node scripts/serve-static.mjs 8091 dist-cpanel-frontend`.
+
+Full guide, flags, manual browsing URLs, CI snippets and troubleshooting:
+[`docs/TESTING-BOTH-BUILDS.md`](docs/TESTING-BOTH-BUILDS.md).
 
 ---
 

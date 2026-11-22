@@ -30,6 +30,8 @@ dist-ssr
 .env
 .env.*
 !.env.example
+!.env.cpanel
+!.env.cpanellocal
 backend/.env
 backend/.env.*
 !backend/.env.example
@@ -67,5 +69,8 @@ docker/mysql/data
 # ---------------------------------------------------------------------------
 .cpanel-build/
 dist-cpanel/
+dist-cpanel-frontend/
+dist-e2e-split/
 backend/*.zip
+test-results/
 

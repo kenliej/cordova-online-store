@@ -1,4 +1,4 @@
-﻿{
+{
   "name": "onlinemall-frontend",
   "private": true,
   "version": "0.0.0",
@@ -6,8 +6,14 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:cpanel": "tsc -b && vite build --mode cpanel --outDir dist-cpanel-frontend --emptyOutDir",
+    "build:local-split": "tsc -b && vite build --mode cpanellocal --outDir dist-e2e-split --emptyOutDir",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "serve:static": "node scripts/serve-static.mjs",
+    "serve:docker-sim": "node scripts/serve-docker-sim.mjs",
+    "test:e2e": "playwright test --config tests/e2e/playwright.config.ts",
+    "test:e2e:local": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-e2e.ps1"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.4",
@@ -21,6 +27,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.65.1",
     "@types/node": "^24.19.2",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
