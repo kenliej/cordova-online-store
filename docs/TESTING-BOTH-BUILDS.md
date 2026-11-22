@@ -79,7 +79,48 @@ CI runs both the SQLite suite and the PostgreSQL suite (`phpunit.pgsql.xml`).
 
 ---
 
-## 1. One command (local, both builds, real browser)
+## 1. Run it on localhost first (frontend + backend together)
+
+Fastest path on Windows (starts PostgreSQL if needed, API on `:8000`, Vite on `:5173`):
+
+```powershell
+npm run start:local
+# same as: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start-local.ps1
+
+# reset demo data first:
+npm run start:local -- -Fresh
+# open the browser automatically:
+npm run start:local -- -Open
+# stop (another terminal):
+npm run start:local -- -Stop
+```
+
+What you get:
+
+| URL | What |
+|---|---|
+| http://127.0.0.1:5173 | React frontend (Vite dev, hot reload) |
+| http://127.0.0.1:8000/api/health | API health + PostgreSQL connectivity |
+| http://127.0.0.1:5173/api/health | health through the Vite proxy (same-origin cookie auth) |
+
+Demo accounts: `admin@onlinemall.test / Admin#2026Secure`,
+`worker@onlinemall.test / Worker#2026Secure`,
+`customer@onlinemall.test / Customer#2026Secure`.
+
+Manual equivalent (two terminals): `scripts/start-local.ps1` only automates the
+commands shown in [README Quick start](../README.md#quick-start--local-development-no-docker).
+The script discovers `DB_*` from `backend/.env`, starts a portable PostgreSQL from
+`.tools/pgsql` when the port is down, seeds only when the database has no users,
+logs to `test-results/logs/local-*.log`, and prints the accounts above.
+
+Browser verification against this exact setup (servers running):
+
+```powershell
+$env:PLAYWRIGHT_CHANNEL="chrome"
+npm run test:e2e:vite
+```
+
+## 1b. One command for both deployment builds (local, real browser)
 
 Requirements: PHP 8.2 + Laravel installed (`pdo_pgsql` enabled), Node.js, PostgreSQL 16 running, Google Chrome
 (or set `PLAYWRIGHT_CHANNEL=bundled` after `npx playwright install chromium`).

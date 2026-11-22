@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "start:local": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start-local.ps1",
     "build": "tsc -b && vite build",
     "build:cpanel": "tsc -b && vite build --mode cpanel --outDir dist-cpanel-frontend --emptyOutDir",
     "build:local-split": "tsc -b && vite build --mode cpanellocal --outDir dist-e2e-split --emptyOutDir",

@@ -153,9 +153,31 @@ docker compose down -v              # stop and delete volumes
 
 ## Quick start — local development (no Docker)
 
-Tested on Windows with XAMPP; adapt paths for Linux/macOS.
-
 Requirements: PHP 8.2+ with `pdo_pgsql`, Composer 2, Node 20.19+/22+, PostgreSQL 16+.
+
+### One command (Windows PowerShell)
+
+```powershell
+npm run start:local
+# reset demo data first:   npm run start:local -- -Fresh
+# open the browser too:    npm run start:local -- -Open
+# stop:                    npm run start:local -- -Stop
+```
+
+It checks/starts PostgreSQL (including the portable cluster in `.tools/` if present),
+migrates + seeds a fresh database on first use, then starts:
+
+| URL | What |
+|---|---|
+| http://127.0.0.1:5173 | React frontend (Vite dev, hot reload) |
+| http://127.0.0.1:8000/api/health | Laravel API health (database connectivity) |
+| http://127.0.0.1:5173/api/health | same health through the Vite proxy |
+
+Demo accounts: `admin@onlinemall.test / Admin#2026Secure`,
+`worker@onlinemall.test / Worker#2026Secure`,
+`customer@onlinemall.test / Customer#2026Secure`.
+
+### Manual setup (two terminals)
 
 ```bash
 # --- PostgreSQL -----------------------------------------------------------
@@ -173,14 +195,16 @@ php artisan migrate --seed
 php artisan storage:link
 php artisan serve --host=127.0.0.1 --port=8000
 
-# --- Frontend (second terminal) ------------------------------------------
+# --- Frontend (second terminal, repo root) -------------------------------
 npm install --legacy-peer-deps   # see "Known limitations" for why
-npm run dev                      # http://localhost:5173
+npm run dev                      # http://127.0.0.1:5173
 ```
 
 The Vite dev server proxies `/api`, `/sanctum` and `/storage` to
 `http://127.0.0.1:8000`, so the browser sees a single origin and Sanctum cookies/CSRF
-work exactly as in production.
+work exactly as in production. Not running PostgreSQL locally yet?
+[`docs/TESTING-BOTH-BUILDS.md`](docs/TESTING-BOTH-BUILDS.md) section 0 covers installed
+and portable PostgreSQL setups.
 
 Run the scheduler (claim-deadline expiry) in a third terminal if needed:
 
