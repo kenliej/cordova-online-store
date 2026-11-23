@@ -44,9 +44,9 @@ $script:failed = 0
 $script:results = @()
 
 $Demo = @{
-    Admin    = @{ Email = "admin@onlinemall.test"; Password = "Admin#2026Secure" }
-    Worker   = @{ Email = "worker@onlinemall.test"; Password = "Worker#2026Secure" }
-    Customer = @{ Email = "customer@onlinemall.test"; Password = "Customer#2026Secure" }
+    Admin    = @{ Email = "admin@gaisano-cordova.com"; Password = "admin@0912345" }
+    Worker   = @{ Email = "worker@gaisano-cordova.com"; Password = "admin@0912345" }
+    Customer = @{ Email = "customer@gaisano-cordova.com"; Password = "Customer#2026Secure" }
 }
 
 function Write-Section([string]$Title) {

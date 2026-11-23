@@ -4,10 +4,12 @@ namespace Tests\Feature\Security;
 
 use App\Models\Order;
 use App\Models\User;
+use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
@@ -164,7 +166,7 @@ class AuthSecurityTest extends TestCase
 
         // Strong password is accepted (registration still pending approval).
         $this->post('/api/auth/register', array_merge(
-            $this->registerPayload(['email' => 'strong.'.uniqid().'@onlinemall.test']),
+            $this->registerPayload(['email' => 'strong.'.uniqid().'@gaisano-cordova.com']),
             $this->idDocuments(),
         ))->assertCreated();
 
@@ -172,7 +174,7 @@ class AuthSecurityTest extends TestCase
         $this->asAdmin();
         $this->postJson('/api/admin/workers', [
             'name' => 'Weak Worker',
-            'email' => 'weak.worker.'.uniqid().'@onlinemall.test',
+            'email' => 'weak.worker.'.uniqid().'@gaisano-cordova.com',
             'phone' => '0917'.random_int(1000000, 9999999),
             'password' => 'weakpassword1',
         ])->assertStatus(422)->assertJsonValidationErrors('password');
@@ -190,10 +192,10 @@ class AuthSecurityTest extends TestCase
 
     public function test_forgot_password_response_is_generic_and_always_200(): void
     {
-        User::factory()->create(['email' => 'known.user@onlinemall.test']);
+        User::factory()->create(['email' => 'known.user@gaisano-cordova.com']);
 
-        $existing = $this->postJson('/api/auth/forgot-password', ['email' => 'known.user@onlinemall.test']);
-        $unknown = $this->postJson('/api/auth/forgot-password', ['email' => 'nobody@onlinemall.test']);
+        $existing = $this->postJson('/api/auth/forgot-password', ['email' => 'known.user@gaisano-cordova.com']);
+        $unknown = $this->postJson('/api/auth/forgot-password', ['email' => 'nobody@gaisano-cordova.com']);
 
         $existing->assertOk();
         $unknown->assertOk();
@@ -204,9 +206,30 @@ class AuthSecurityTest extends TestCase
         );
     }
 
+    public function test_password_reset_email_links_to_the_spa_reset_page(): void
+    {
+        Notification::fake();
+        config(['app.frontend_url' => 'http://localhost:8080']);
+
+        $user = User::factory()->create(['email' => 'reset.link@gaisano-cordova.com']);
+
+        $this->postJson('/api/auth/forgot-password', ['email' => $user->email])->assertOk();
+
+        Notification::assertSentTo($user, ResetPassword::class, function (ResetPassword $notification) use ($user): bool {
+            $url = $notification->toMail($user)->actionUrl;
+
+            $this->assertNotNull($url);
+            $this->assertStringStartsWith('http://localhost:8080/reset-password/', $url);
+            $this->assertStringContainsString('?email='.urlencode((string) $user->email), $url);
+            $this->assertStringNotContainsString('/forgot-password', $url);
+
+            return true;
+        });
+    }
+
     public function test_reset_token_is_single_use(): void
     {
-        $user = User::factory()->create(['email' => 'reset.once@onlinemall.test']);
+        $user = User::factory()->create(['email' => 'reset.once@gaisano-cordova.com']);
         $token = Password::broker()->createToken($user);
 
         $this->postJson('/api/auth/reset-password', [
@@ -228,7 +251,7 @@ class AuthSecurityTest extends TestCase
 
     public function test_expired_reset_token_is_rejected(): void
     {
-        $user = User::factory()->create(['email' => 'reset.expired@onlinemall.test']);
+        $user = User::factory()->create(['email' => 'reset.expired@gaisano-cordova.com']);
         $token = Password::broker()->createToken($user);
 
         DB::table('password_reset_tokens')
@@ -247,11 +270,11 @@ class AuthSecurityTest extends TestCase
 
     public function test_reset_password_rejects_bogus_tokens(): void
     {
-        User::factory()->create(['email' => 'bogus.token@onlinemall.test']);
+        User::factory()->create(['email' => 'bogus.token@gaisano-cordova.com']);
 
         $this->postJson('/api/auth/reset-password', [
             'token' => 'not-a-real-token',
-            'email' => 'bogus.token@onlinemall.test',
+            'email' => 'bogus.token@gaisano-cordova.com',
             'password' => 'NewStrong#2026Pass',
             'password_confirmation' => 'NewStrong#2026Pass',
         ])->assertStatus(422);
@@ -263,17 +286,17 @@ class AuthSecurityTest extends TestCase
      */
     public function test_reset_password_does_not_reveal_account_existence(): void
     {
-        User::factory()->create(['email' => 'existing.account@onlinemall.test']);
+        User::factory()->create(['email' => 'existing.account@gaisano-cordova.com']);
 
         $existing = $this->postJson('/api/auth/reset-password', [
             'token' => 'definitely-invalid-token',
-            'email' => 'existing.account@onlinemall.test',
+            'email' => 'existing.account@gaisano-cordova.com',
             'password' => 'NewStrong#2026Pass',
             'password_confirmation' => 'NewStrong#2026Pass',
         ]);
         $unknown = $this->postJson('/api/auth/reset-password', [
             'token' => 'definitely-invalid-token',
-            'email' => 'does.not.exist@onlinemall.test',
+            'email' => 'does.not.exist@gaisano-cordova.com',
             'password' => 'NewStrong#2026Pass',
             'password_confirmation' => 'NewStrong#2026Pass',
         ]);
@@ -294,7 +317,7 @@ class AuthSecurityTest extends TestCase
     public function test_password_reset_email_is_not_poisoned_by_the_host_header(): void
     {
         $user = User::factory()->create([
-            'email' => 'host.header@onlinemall.test',
+            'email' => 'host.header@gaisano-cordova.com',
         ]);
 
         $response = $this->withServerVariables(['HTTP_HOST' => 'evil.attacker.test'])

@@ -132,6 +132,14 @@ createRoot(document.getElementById("root")!).render(
               </Route>
             </Route>
 
+            {/* PASSWORD RESET LINKS
+                Public (even when already signed in) so e-mail links always open
+                the reset form instead of redirecting to the guest/login pages. */}
+            <Route element={<GuestLayout />}>
+              <Route path="/reset-password" element={<ForgotPassword />} />
+              <Route path="/reset-password/:token" element={<ForgotPassword />} />
+            </Route>
+
             {/* CUSTOMER ROUTES */}
             <Route element={<RequireRole roles={["customer"]} />}>
               <Route element={<CustomerLayout />}>

@@ -321,7 +321,7 @@ Vercel: push to the connected branch (or `vercel --prod`). Keep
 | Preflight 204 but login still fails | Check the response has `Access-Control-Allow-Origin` equal to the frontend origin; look at the browser's failing request headers (must include `Authorization` on later calls). |
 | `419 CSRF token mismatch` | The client is in cookie mode (relative `VITE_API_BASE_URL` or `VITE_AUTH_MODE` unset) while the API is cross-origin. Set token mode and redeploy. |
 | Images `403` | URLs must include the subdirectory (`APP_URL=https://kjugarap.top/omc-backend`), and the `storage` route must reach Laravel (`.htaccess` rewrites everything). |
-| Password-reset e-mail link points to the wrong host | `APP_URL` must be the API URL (with subdirectory); `APP_FRONTEND_URL` is where the reset form lives (Vercel). |
+| Password-reset e-mail link points to the wrong host | Reset e-mails now link directly to `APP_FRONTEND_URL/reset-password/<token>` (the SPA route). `APP_URL` must still be the API URL (with subdirectory); `APP_FRONTEND_URL` must be the exact Vercel origin. |
 | Scheduled claim-expiry never runs | Cron not set (every minute, `artisan schedule:run`); check `storage/logs/scheduler.log`. |
 | Token expires too fast | `SANCTUM_EXPIRATION` minutes (e.g. `10080` = 7 days); empty = no expiry. |
 | Vercel build fails on peer deps | Keep `npm ci --legacy-peer-deps` (already in `vercel.json`); the upstream lockfile has a TypeScript peer conflict. |
@@ -370,7 +370,7 @@ Then exercise the API exactly like the Vercel SPA:
 curl -s http://127.0.0.1:8081/omc-backend/api/health
 curl -s -X POST http://127.0.0.1:8081/omc-backend/api/auth/token \
   -H "Origin: https://omc.vercel.app" -H "Content-Type: application/json" \
-  -d '{"login":"customer@onlinemall.test","password":"Customer#2026Secure"}'
+  -d '{"login":"customer@gaisano-cordova.com","password":"Customer#2026Secure"}'
 ```
 
 To try the real SPA against the simulated API locally:

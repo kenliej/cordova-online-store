@@ -2075,7 +2075,7 @@ Middleware suggestion: `auth:sanctum` + `role:...`; customer-only routes additio
 | Seeder | Data source | Notes |
 |---|---|---|
 | `CategorySeeder` | §4.4 + §2.12 taxonomy | product categories with parents (`Electronics` → `Audio`, `Wearables`; `Fashion & Apparel` → `Footwear`, `Men's Wear`; `Home & Living` → `Kitchen`; `Bags` → `Accessories`), plus 11 store categories |
-| `AdminUserSeeder` | new | 1 admin (`admin@onlinemall.test` / known password) since no admin exists in the UI |
+| `AdminUserSeeder` | new | 1 admin (`admin@gaisano-cordova.com` / known password) since no admin exists in the UI |
 | `WorkerSeeder` | §4.11 workers + §1.8 form fields | 2 workers with `worker_id` codes, known password, profile images |
 | `CustomerSeeder` | §4.11 pending/customers/removed | 2 pending + 3 active customers (unique `customer_id`s, real-looking emails) + 1 banned + 1 removed; distribute `bad_records_count` 0/1/2 to demo Ban label |
 | `StoreSeeder` | §4.6 (9 stores) + §4.12 (4 admin stores) | merge into one realistic set (fix duplicate names/spellings), add images/hours/phone; seed 5 gallery images for at least McDonald's for the detail page |

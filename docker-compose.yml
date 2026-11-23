@@ -62,7 +62,7 @@ x-app-environment: &app-environment
   MAIL_MAILER: smtp
   MAIL_HOST: mailpit
   MAIL_PORT: "1025"
-  MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS:-no-reply@onlinemall.test}
+  MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS:-no-reply@gaisano-cordova.com}
   MAIL_FROM_NAME: "Online Mall Cordova"
   TRUSTED_PROXIES: "127.0.0.1,172.16.0.0/12"
   TRUSTED_HOSTS: ${TRUSTED_HOSTS:-localhost,127.0.0.1}

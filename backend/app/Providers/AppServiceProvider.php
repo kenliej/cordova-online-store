@@ -2,6 +2,8 @@
 
 namespace App\Providers;
 
+use App\Models\User;
+use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
@@ -22,6 +24,7 @@ class AppServiceProvider extends ServiceProvider
         $this->configurePasswords();
         $this->configureRateLimiting();
         $this->configureUrls();
+        $this->configurePasswordResetUrl();
         $this->configureModelStrictness();
     }
 
@@ -87,6 +90,22 @@ class AppServiceProvider extends ServiceProvider
         if (config('app.force_https')) {
             URL::forceScheme('https');
         }
+    }
+
+    /**
+     * Password-reset e-mails must link to the SPA route, not to APP_URL: in the
+     * Docker stack APP_URL is nginx (which serves the SPA and never reaches the
+     * Laravel web route), and in the split deployment the frontend lives on
+     * another origin. Point the notification directly at APP_FRONTEND_URL.
+     */
+    private function configurePasswordResetUrl(): void
+    {
+        ResetPassword::createUrlUsing(static function (User $user, string $token): string {
+            $frontend = rtrim((string) config('app.frontend_url', config('app.url')), '/');
+
+            return $frontend.'/reset-password/'.rawurlencode($token)
+                .'?email='.rawurlencode((string) $user->email);
+        });
     }
 
     private function configureModelStrictness(): void

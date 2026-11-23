@@ -2,18 +2,18 @@ import { expect, type Page } from "@playwright/test";
 
 export const DEMO = {
   customer: {
-    email: "customer@onlinemall.test",
+    email: "customer@gaisano-cordova.com",
     password: "Customer#2026Secure",
     home: "/",
   },
   worker: {
-    email: "worker@onlinemall.test",
-    password: "Worker#2026Secure",
+    email: "worker@gaisano-cordova.com",
+    password: "admin@0912345",
     home: "/worker/orders",
   },
   admin: {
-    email: "admin@onlinemall.test",
-    password: "Admin#2026Secure",
+    email: "admin@gaisano-cordova.com",
+    password: "admin@0912345",
     home: "/admin/accounts",
   },
 } as const;

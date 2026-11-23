@@ -118,9 +118,9 @@ All severities use CVSS-style qualitative rating. Every finding below is **Fixed
   ```powershell
   curl.exe -X POST http://127.0.0.1:8000/api/auth/forgot-password `
     -H "Host: evil.attacker.test" -H "Content-Type: application/json" `
-    -d '{"email":"worker@onlinemall.test"}'
+    -d '{"email":"worker@gaisano-cordova.com"}'
   # mail log (log mailer) contained:
-  # Reset Password: http://evil.attacker.test/reset-password/<token>?email=worker%40onlinemall.test
+  # Reset Password: http://evil.attacker.test/reset-password/<token>?email=worker%40gaisano-cordova.com
   ```
 - **Impact:** attacker requests a reset for a victim e-mail with a forged Host; the victim receives a link on the attacker's domain; clicking it hands the single-use token to the attacker, who resets the victim's password (including admin accounts) on the real site — full account takeover.
 - **Fix applied:** `AppServiceProvider::configureUrls()` now calls `URL::forceRootUrl(config('app.url'))` (`backend/app/Providers/AppServiceProvider.php:80-86`); `TRUSTED_HOSTS` is wired in `backend/.env`, `backend/.env.example`, root `.env.example` and `docker-compose.yml:63` (`${TRUSTED_HOSTS:-localhost,127.0.0.1}`). TrustHosts plus `forceRootUrl` are defence-in-depth; the canonical root URL is the primary control.
@@ -368,7 +368,7 @@ npm audit --audit-level=low                           # 0 vulnerabilities
 | R-01 | Local dev only: `APP_DEBUG=true` stack traces + `X-Powered-By` from `php artisan serve` | Docker sets `APP_DEBUG=false` and `expose_php=Off`; traces are useful locally | Never expose the dev server outside loopback; keep prod config as reviewed |
 | R-02 | `SESSION_SECURE_COOKIE=false` default (compose/env example) | Local stack runs over HTTP; Secure cookies break local browser flows | **Mandatory:** set `SESSION_SECURE_COOKIE=true` for any HTTPS deployment; TLS termination in front of nginx (HSTS header already emitted) |
 | R-03 | Laravel skips `TrustHosts` when `APP_ENV=local` | Framework design; `forceRootUrl(APP_URL)` was added as the env-independent primary control and verified | Keep `APP_URL`/`TRUSTED_HOSTS` correct per environment; Docker `APP_ENV=production` enforces TrustHosts |
-| R-04 | Demo credentials published in README/spec (`admin@onlinemall.test` etc.) | Intentional seeded demo accounts for the deliverable | Before any real deployment: reseed/rotate, never publish these accounts |
+| R-04 | Demo credentials published in README/spec (`admin@gaisano-cordova.com` etc.) | Intentional seeded demo accounts for the deliverable | Before any real deployment: reseed/rotate, never publish these accounts |
 | R-05 | `/storage/` static location lacks `nosniff`/CSP headers | Serves only validated raster images (unknown extensions are `deny`d); no PHP handler | Optionally add the security-headers snippet to `/storage/`; keep upload allow-list |
 | R-06 | `axllent/mailpit:latest` unpinned, mailpit UI/SMTP runs by default | Dev-only mail sink; UI now loopback-bound; app→SMTP on internal network | Pin a digest/version; drop mailpit service (or use a dev profile) in production compose |
 | R-07 | php-fpm master runs as root | Standard `php:8.2-fpm-alpine` behaviour; workers `www-data`; FPM port not published; `no-new-privileges` | Optionally run a non-root FPM master variant; keep port private |

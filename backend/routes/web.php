@@ -26,9 +26,11 @@ Route::get('/storage/{path}', MediaController::class)
 */
 Route::get('/reset-password/{token}', function (Request $request, string $token) {
     $query = http_build_query(array_filter([
-        'token' => $token,
         'email' => (string) $request->query('email'),
     ]));
 
-    return redirect()->away(rtrim((string) config('app.frontend_url'), '/').'/forgot-password?'.$query);
+    return redirect()->away(
+        rtrim((string) config('app.frontend_url'), '/').'/reset-password/'.rawurlencode($token)
+        .($query !== '' ? '?'.$query : '')
+    );
 })->name('password.reset');

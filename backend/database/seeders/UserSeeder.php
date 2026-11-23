@@ -9,21 +9,41 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 
 /**
- * Demo accounts required by docs/BACKEND_ARCHITECTURE.md §12 / §9.
+ * Demo accounts for local development / the Docker stack.
+ *
+ * Staff (admins + workers) all use the password: admin@0912345
+ *
+ *   Admins:
+ *     admin@gaisano-cordova.com
+ *     admin-kenlie@gaisano-cordova.com
+ *     admin-sherwynn@gaisano-cordova.com
+ *     admin-dudes@gaisano-cordova.com
+ *     admin-charlie@gaisano-cordova.com
+ *
+ *   Workers:
+ *     worker@gaisano-cordova.com
+ *     worker-kenlie@gaisano-cordova.com
+ *     worker-sherwynn@gaisano-cordova.com
+ *     worker-dudes@gaisano-cordova.com
+ *     worker-charlie@gaisano-cordova.com
+ *
+ *   Customers (demo passwords unchanged, domain renamed):
+ *     customer@gaisano-cordova.com / Customer#2026Secure   (active)
+ *     shermaine@gaisano-cordova.com / Customer#2026Secure  (active, bad record)
+ *     alex.smith@gaisano-cordova.com / Customer#2026Secure (active)
+ *     pending1@gaisano-cordova.com / Customer#2026Secure   (pending, ID scans)
+ *     pending2@gaisano-cordova.com / Customer#2026Secure   (pending, ID scans)
+ *     removed.customer@gaisano-cordova.com / Customer#2026Secure
+ *     banned.customer@gaisano-cordova.com / Customer#2026Secure
  *
  * Idempotent (updateOrCreate on the email): re-running `db:seed` keeps the same
  * demo credentials and public account numbers.
- *
- *   admin@onlinemall.test      / Admin#2026Secure      (admin, active)
- *   worker@onlinemall.test     / Worker#2026Secure     (worker, active)
- *   customer@onlinemall.test   / Customer#2026Secure   (customer, active)
- *
- * plus a second active worker, two pending customers (with private ID scans),
- * two more active customers (one bad record), a removed customer, a banned
- * customer and a removed worker.
  */
 class UserSeeder extends Seeder
 {
+    /** Shared password for every demo admin/worker account. */
+    private const STAFF_PASSWORD = 'admin@0912345';
+
     /** 1x1 transparent PNG used as the private ID-scan placeholder. */
     private const PLACEHOLDER_PNG_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 
@@ -36,25 +56,73 @@ class UserSeeder extends Seeder
         $accounts = [
             // ---- administrators -------------------------------------------------
             [
-                'email' => 'admin@onlinemall.test',
+                'email' => 'admin@gaisano-cordova.com',
                 'name' => 'Mall Administrator',
-                'password' => 'Admin#2026Secure',
+                'password' => self::STAFF_PASSWORD,
                 'role' => 'admin',
                 'status' => 'active',
-                'phone' => '09170000001',
+                'phone' => '09171000001',
                 'gender' => null,
                 'birthday' => '1985-04-12',
-                'address' => 'Online Mall Cordova, Cordova, Cebu',
+                'address' => 'Gaisano Cordova, Cordova, Cebu',
                 'avatar' => 'photo-1500648767791-00dcc994a43e',
+            ],
+            [
+                'email' => 'admin-kenlie@gaisano-cordova.com',
+                'name' => 'Kenlie Administrator',
+                'password' => self::STAFF_PASSWORD,
+                'role' => 'admin',
+                'status' => 'active',
+                'phone' => '09171000002',
+                'gender' => null,
+                'birthday' => '1988-06-21',
+                'address' => 'Cordova, Cebu',
+                'avatar' => 'photo-1506794778202-cad84cf45f1d',
+            ],
+            [
+                'email' => 'admin-sherwynn@gaisano-cordova.com',
+                'name' => 'Sherwynn Administrator',
+                'password' => self::STAFF_PASSWORD,
+                'role' => 'admin',
+                'status' => 'active',
+                'phone' => '09171000003',
+                'gender' => 'Real Men',
+                'birthday' => '1995-09-11',
+                'address' => 'Cordova, Cebu',
+                'avatar' => 'photo-1534528741775-53994a69daeb',
+            ],
+            [
+                'email' => 'admin-dudes@gaisano-cordova.com',
+                'name' => 'Dudes Administrator',
+                'password' => self::STAFF_PASSWORD,
+                'role' => 'admin',
+                'status' => 'active',
+                'phone' => '09171000004',
+                'gender' => 'Real Men',
+                'birthday' => '1990-01-15',
+                'address' => 'Lapu-Lapu City, Cebu',
+                'avatar' => 'photo-1507003211169-0a1dd7228f2d',
+            ],
+            [
+                'email' => 'admin-charlie@gaisano-cordova.com',
+                'name' => 'Charlie Administrator',
+                'password' => self::STAFF_PASSWORD,
+                'role' => 'admin',
+                'status' => 'active',
+                'phone' => '09171000005',
+                'gender' => 'Real Men',
+                'birthday' => '1992-11-03',
+                'address' => 'Mandaue City, Cebu',
+                'avatar' => 'photo-1539571696357-5a69c17a67c6',
             ],
             // ---- mall workers ---------------------------------------------------
             [
-                'email' => 'worker@onlinemall.test',
+                'email' => 'worker@gaisano-cordova.com',
                 'name' => 'Carlo Dela Cruz',
-                'password' => 'Worker#2026Secure',
+                'password' => self::STAFF_PASSWORD,
                 'role' => 'worker',
                 'status' => 'active',
-                'phone' => '09170000002',
+                'phone' => '09172000001',
                 'worker_no' => '200000000001',
                 'gender' => 'Real Men',
                 'birthday' => '1993-02-18',
@@ -62,34 +130,60 @@ class UserSeeder extends Seeder
                 'avatar' => 'photo-1573496359142-b8d87734a5a2',
             ],
             [
-                'email' => 'worker2@onlinemall.test',
-                'name' => 'Mariel Santos',
-                'password' => 'Worker#2026Secure',
+                'email' => 'worker-kenlie@gaisano-cordova.com',
+                'name' => 'Kenlie Worker',
+                'password' => self::STAFF_PASSWORD,
                 'role' => 'worker',
                 'status' => 'active',
-                'phone' => '09170000007',
+                'phone' => '09172000002',
                 'worker_no' => '200000000002',
-                'gender' => 'Female',
-                'birthday' => '1996-07-30',
-                'address' => 'Lapu-Lapu City, Cebu',
-                'avatar' => 'photo-1580489944761-15a19d654956',
+                'gender' => 'Real Men',
+                'birthday' => '1994-05-09',
+                'address' => 'Cordova, Cebu',
+                'avatar' => 'photo-1506794778202-cad84cf45f1d',
             ],
             [
-                'email' => 'removed.worker@onlinemall.test',
-                'name' => 'Dario Mercado',
-                'password' => 'Worker#2026Secure',
+                'email' => 'worker-sherwynn@gaisano-cordova.com',
+                'name' => 'Sherwynn Worker',
+                'password' => self::STAFF_PASSWORD,
                 'role' => 'worker',
-                'status' => 'removed',
-                'phone' => '09170000008',
+                'status' => 'active',
+                'phone' => '09172000003',
                 'worker_no' => '200000000003',
                 'gender' => 'Real Men',
-                'birthday' => '1990-11-05',
+                'birthday' => '1995-09-11',
+                'address' => 'Lapu-Lapu City, Cebu',
+                'avatar' => 'photo-1534528741775-53994a69daeb',
+            ],
+            [
+                'email' => 'worker-dudes@gaisano-cordova.com',
+                'name' => 'Dudes Worker',
+                'password' => self::STAFF_PASSWORD,
+                'role' => 'worker',
+                'status' => 'active',
+                'phone' => '09172000004',
+                'worker_no' => '200000000004',
+                'gender' => 'Real Men',
+                'birthday' => '1991-12-01',
                 'address' => 'Mandaue City, Cebu',
                 'avatar' => 'photo-1507003211169-0a1dd7228f2d',
             ],
+            [
+                'email' => 'worker-charlie@gaisano-cordova.com',
+                'name' => 'Charlie Worker',
+                'password' => self::STAFF_PASSWORD,
+                'role' => 'worker',
+                'status' => 'active',
+                'phone' => '09172000005',
+                'worker_no' => '200000000005',
+                'gender' => 'Real Men',
+                'birthday' => '1990-08-24',
+                'address' => 'Consolacion, Cebu',
+                'avatar' => 'photo-1539571696357-5a69c17a67c6',
+            ],
             // ---- active customers ----------------------------------------------
             [
-                'email' => 'customer@onlinemall.test',
+                'email' => 'customer@gaisano-cordova.com',
                 'name' => 'Sherwynn James Misula',
                 'password' => 'Customer#2026Secure',
                 'role' => 'customer',
@@ -103,7 +197,7 @@ class UserSeeder extends Seeder
                 'avatar' => 'photo-1534528741775-53994a69daeb',
             ],
             [
-                'email' => 'shermaine@onlinemall.test',
+                'email' => 'shermaine@gaisano-cordova.com',
                 'name' => 'Shermaine Misula',
                 'password' => 'Customer#2026Secure',
                 'role' => 'customer',
@@ -117,7 +211,7 @@ class UserSeeder extends Seeder
                 'avatar' => 'photo-1517841905240-472988babdf9',
             ],
             [
-                'email' => 'alex.smith@onlinemall.test',
+                'email' => 'alex.smith@gaisano-cordova.com',
                 'name' => 'Alex Smith',
                 'password' => 'Customer#2026Secure',
                 'role' => 'customer',
@@ -132,7 +226,7 @@ class UserSeeder extends Seeder
             ],
             // ---- pending registrations (awaiting admin approval) ---------------
             [
-                'email' => 'pending1@onlinemall.test',
+                'email' => 'pending1@gaisano-cordova.com',
                 'name' => 'Sherwynn James Misula',
                 'password' => 'Customer#2026Secure',
                 'role' => 'customer',
@@ -146,7 +240,7 @@ class UserSeeder extends Seeder
                 'avatar' => 'photo-1534528741775-53994a69daeb',
             ],
             [
-                'email' => 'pending2@onlinemall.test',
+                'email' => 'pending2@gaisano-cordova.com',
                 'name' => 'Shermaine Misula',
                 'password' => 'Customer#2026Secure',
                 'role' => 'customer',
@@ -161,7 +255,7 @@ class UserSeeder extends Seeder
             ],
             // ---- removed / banned customers ------------------------------------
             [
-                'email' => 'removed.customer@onlinemall.test',
+                'email' => 'removed.customer@gaisano-cordova.com',
                 'name' => 'Removed Customer',
                 'password' => 'Customer#2026Secure',
                 'role' => 'customer',
@@ -175,7 +269,7 @@ class UserSeeder extends Seeder
                 'avatar' => 'photo-1500648767791-00dcc994a43e',
             ],
             [
-                'email' => 'banned.customer@onlinemall.test',
+                'email' => 'banned.customer@gaisano-cordova.com',
                 'name' => 'Banned Customer',
                 'password' => 'Customer#2026Secure',
                 'role' => 'customer',
@@ -194,12 +288,13 @@ class UserSeeder extends Seeder
             $this->seedAccount($definition);
         }
 
-        $this->seedPendingIdDocuments('pending1@onlinemall.test');
-        $this->seedPendingIdDocuments('pending2@onlinemall.test');
+        $this->seedPendingIdDocuments('pending1@gaisano-cordova.com');
+        $this->seedPendingIdDocuments('pending2@gaisano-cordova.com');
 
         $this->command?->info(sprintf(
-            'UserSeeder: %d demo accounts ready (admin/worker/customer + pending/removed/banned).',
+            'UserSeeder: %d demo accounts ready (5 admins, 5 workers, 7 customers; staff password: %s).',
             count($accounts),
+            self::STAFF_PASSWORD,
         ));
     }
 

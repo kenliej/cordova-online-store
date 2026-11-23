@@ -239,7 +239,10 @@ Services: `db` (postgres:16-alpine, volume, `pg_isready` healthcheck), `app` (ph
 - Feature tests cover happy path + auth + validation + authorization/IDOR + business-rule errors.
 - `php artisan test` green; `vendor/bin/pint --test` clean; no debug leftovers (`dd`, `dump`, `var_dump`, `console.log` in frontend except error handling).
 - Seeder produces demo data (admin, workers, customers with pending/active/removed/banned, stores, products with images, orders at various statuses dated today/-1/-2 days, notifications, contact messages).
-- Demo accounts (document in README): admin@onlinemall.test / Admin#2026Secure; worker@onlinemall.test / Worker#2026Secure; customer@onlinemall.test / Customer#2026Secure.
+- Demo accounts (document in README): 5 admins + 5 workers on `@gaisano-cordova.com`
+  (`admin@`, `admin-kenlie@`, `admin-sherwynn@`, `admin-dudes@`, `admin-charlie@`;
+  `worker@`, `worker-kenlie@`, `worker-sherwynn@`, `worker-dudes@`, `worker-charlie@`)
+  with password `admin@0912345`; `customer@gaisano-cordova.com` / `Customer#2026Secure`.
 
 ## 10. Ownership map (avoid file conflicts)
 

@@ -116,10 +116,10 @@ class InjectionXssTest extends TestCase
 
     public function test_sql_injection_in_login_does_not_authenticate(): void
     {
-        User::factory()->create(['email' => 'sqli.target@onlinemall.test']);
+        User::factory()->create(['email' => 'sqli.target@gaisano-cordova.com']);
         $this->assertGuest();
 
-        foreach (["' OR '1'='1' --", "admin@onlinemall.test' --", "' UNION SELECT 1,2,3 --"] as $payload) {
+        foreach (["' OR '1'='1' --", "admin@gaisano-cordova.com' --", "' UNION SELECT 1,2,3 --"] as $payload) {
             $response = $this->postJson('/api/auth/login', [
                 'login' => $payload,
                 'password' => $payload,
@@ -187,7 +187,7 @@ class InjectionXssTest extends TestCase
 
         $xss = '<img src=x onerror=alert(1)>';
         $this->post('/api/auth/register', array_merge(
-            $this->registerPayload(['name' => $xss, 'email' => 'xss.'.uniqid().'@onlinemall.test']),
+            $this->registerPayload(['name' => $xss, 'email' => 'xss.'.uniqid().'@gaisano-cordova.com']),
             $this->idDocuments(),
         ))->assertCreated();
 

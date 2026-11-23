@@ -112,7 +112,7 @@ trait SecurityTestSupport
     {
         return array_merge([
             'name' => 'Adversarial Registrant',
-            'email' => 'security.'.uniqid().'@onlinemall.test',
+            'email' => 'security.'.uniqid().'@gaisano-cordova.com',
             'phone' => '0917'.random_int(1000000, 9999999),
             'address' => 'Cordova, Cebu',
             'birthday' => now()->subYears(25)->toDateString(),
@@ -142,7 +142,7 @@ trait SecurityTestSupport
     {
         return array_merge([
             'name' => 'Security Probe',
-            'email' => 'probe.'.uniqid().'@onlinemall.test',
+            'email' => 'probe.'.uniqid().'@gaisano-cordova.com',
             'phone' => '09171234567',
             'subject' => 'Security audit probe',
             'message' => 'Adversarial contact form probe.',

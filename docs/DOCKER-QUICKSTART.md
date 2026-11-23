@@ -105,13 +105,13 @@ $b = New-Object byte[] 32
 | http://localhost:8080/admin/accounts | Admin dashboard (after admin login) |
 | http://127.0.0.1:8025 | Mailpit - password-reset e-mails |
 
-Demo accounts (created automatically on an empty database):
+Demo accounts (created automatically on an empty database; all `@gaisano-cordova.com`):
 
-| Role | Email | Password |
+| Role | Accounts | Password |
 |---|---|---|
-| Admin | `admin@onlinemall.test` | `Admin#2026Secure` |
-| Worker | `worker@onlinemall.test` | `Worker#2026Secure` |
-| Customer | `customer@onlinemall.test` | `Customer#2026Secure` |
+| Admin (5) | `admin@`, `admin-kenlie@`, `admin-sherwynn@`, `admin-dudes@`, `admin-charlie@` | `admin@0912345` |
+| Worker (5) | `worker@`, `worker-kenlie@`, `worker-sherwynn@`, `worker-dudes@`, `worker-charlie@` | `admin@0912345` |
+| Customer | `customer@` (others: `shermaine@`, `alex.smith@`, `pending1@`, `pending2@`) | `Customer#2026Secure` |
 
 ---
 
@@ -312,6 +312,7 @@ instant reload, run Vite locally against the Docker backend:
 | Duplicate demo users/orders | `db:seed` was run more than once. Reset: `npm run docker:reset`. |
 | `entrypoint: not found` / `$'\r'` errors (Windows) | Fixed in the Dockerfile (line endings normalized); rebuild without cache: `docker compose build --no-cache app web`. |
 | Password-reset e-mail not received | It is captured by Mailpit: open http://127.0.0.1:8025. |
+| Password-reset e-mail link opens the login/guest page | Fixed in the current code: e-mails now link directly to the SPA route `/reset-password/<token>?email=...` (public even when signed in). Request a fresh e-mail (links expire after 60 minutes); if you have old images, rebuild with `docker compose up -d --build app web`. |
 | Everything broken, start clean | `docker compose down -v --rmi local` then `npm run docker:up` (deletes DB, images and volumes). |
 
 ---

@@ -32,9 +32,9 @@ $script:Passed = 0
 $script:Failed = 0
 $script:Results = @()
 
-$script:Customer = @{ email = "customer@onlinemall.test"; password = "Customer#2026Secure" }
-$script:Worker = @{ email = "worker@onlinemall.test"; password = "Worker#2026Secure" }
-$script:Admin = @{ email = "admin@onlinemall.test"; password = "Admin#2026Secure" }
+$script:Customer = @{ email = "customer@gaisano-cordova.com"; password = "Customer#2026Secure" }
+$script:Worker = @{ email = "worker@gaisano-cordova.com"; password = "admin@0912345" }
+$script:Admin = @{ email = "admin@gaisano-cordova.com"; password = "admin@0912345" }
 
 function Write-Section([string]$Title) {
     Write-Host ""
@@ -296,7 +296,7 @@ Test-Check "POST /api/contact stores a public message" {
     $contactSession = New-ApiSession
     $r = Invoke-Api -Method POST -Path "/api/contact" -Session $contactSession -Body @{
         name    = "Smoke Test"
-        email   = "smoke@onlinemall.test"
+        email   = "smoke@gaisano-cordova.com"
         phone   = "09170000001"
         subject = "Smoke test message"
         message = "Hello from the automated smoke test."
@@ -321,7 +321,7 @@ Test-Check "unauthenticated admin access is 401" {
 Test-Check "invalid credentials are rejected (422)" {
     $session = New-ApiSession
     $r = Invoke-Api -Method POST -Path "/api/auth/login" -Session $session -Body @{
-        login = "nobody@onlinemall.test"; password = "WrongPassword#1"; remember = $false
+        login = "nobody@gaisano-cordova.com"; password = "WrongPassword#1"; remember = $false
     }
     Assert-Equal $r.Status 422 "invalid login status"
 }
@@ -490,7 +490,7 @@ Test-Check "registration with ID images creates a pending account" {
     [System.IO.File]::WriteAllBytes($idFront, [Convert]::FromBase64String($pngBase64))
     [System.IO.File]::WriteAllBytes($idBack, [Convert]::FromBase64String($pngBase64))
 
-    $email = "smoke." + (Get-Date -Format "yyyyMMddHHmmss") + "@onlinemall.test"
+    $email = "smoke." + (Get-Date -Format "yyyyMMddHHmmss") + "@gaisano-cordova.com"
     $script:newCustomerEmail = $email
     $script:newCustomerPassword = "SmokeTest#2026Secure"
 
@@ -544,7 +544,7 @@ Test-Check "newly approved customer can log in" {
 Write-Section "7. Rate limiting"
 # ---------------------------------------------------------------------------
 Test-Check "login brute force is throttled (429)" {
-    $login = "bruteforce." + [guid]::NewGuid().ToString("N") + "@onlinemall.test"
+    $login = "bruteforce." + [guid]::NewGuid().ToString("N") + "@gaisano-cordova.com"
     $last = 0
     for ($i = 1; $i -le 7; $i++) {
         $session = New-ApiSession

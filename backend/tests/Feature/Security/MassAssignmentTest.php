@@ -31,7 +31,7 @@ class MassAssignmentTest extends TestCase
         Storage::fake('private');
         Storage::fake('public');
 
-        $email = 'escalate.'.uniqid().'@onlinemall.test';
+        $email = 'escalate.'.uniqid().'@gaisano-cordova.com';
         $this->post('/api/auth/register', array_merge(
             $this->registerPayload(['email' => $email]),
             $this->idDocuments(),
@@ -62,7 +62,7 @@ class MassAssignmentTest extends TestCase
     public function test_profile_update_cannot_escalate_role_or_account_metadata(): void
     {
         $customer = User::factory()->customer()->create([
-            'email' => 'cannot.change@onlinemall.test',
+            'email' => 'cannot.change@gaisano-cordova.com',
             'password' => 'Original#2026Pass',
         ]);
         $originalNo = $customer->customer_no;
@@ -77,7 +77,7 @@ class MassAssignmentTest extends TestCase
             'worker_no' => '888888888888',
             'store_id' => 1,
             'id' => 1,
-            'email' => 'attacker@onlinemall.test',
+            'email' => 'attacker@gaisano-cordova.com',
             'password' => 'Hacked#2026Pass',
             'remember_token' => 'forged',
             'email_verified_at' => now()->toIso8601String(),
@@ -90,14 +90,14 @@ class MassAssignmentTest extends TestCase
         $this->assertSame(0, $customer->bad_records);
         $this->assertSame($originalNo, $customer->customer_no);
         $this->assertNull($customer->worker_no);
-        $this->assertSame('cannot.change@onlinemall.test', $customer->email);
+        $this->assertSame('cannot.change@gaisano-cordova.com', $customer->email);
         $this->assertTrue(Hash::check('Original#2026Pass', $customer->password));
     }
 
     public function test_admin_worker_creation_cannot_create_an_admin(): void
     {
         $this->asAdmin();
-        $email = 'worker.escalate.'.uniqid().'@onlinemall.test';
+        $email = 'worker.escalate.'.uniqid().'@gaisano-cordova.com';
 
         $response = $this->postJson('/api/admin/workers', [
             'name' => 'Escalation Attempt',
@@ -134,7 +134,7 @@ class MassAssignmentTest extends TestCase
             'bad_records' => 99,
             'customer_no' => '111111111111',
             'worker_no' => '222222222222',
-            'email' => 'changed.worker@onlinemall.test',
+            'email' => 'changed.worker@gaisano-cordova.com',
         ])->assertOk();
 
         $worker->refresh();

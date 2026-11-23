@@ -67,7 +67,7 @@ class RateLimitSecurityTest extends TestCase
 
     public function test_forgot_password_is_limited_to_five_requests_per_minute(): void
     {
-        $email = 'bruteforce.'.uniqid().'@onlinemall.test';
+        $email = 'bruteforce.'.uniqid().'@gaisano-cordova.com';
 
         for ($attempt = 1; $attempt <= 5; $attempt++) {
             $this->postJson('/api/auth/forgot-password', ['email' => $email])->assertOk();
@@ -83,13 +83,13 @@ class RateLimitSecurityTest extends TestCase
     {
         for ($attempt = 1; $attempt <= 3; $attempt++) {
             $this->postJson('/api/contact', $this->contactPayload([
-                'email' => 'contact.'.$attempt.'.'.uniqid().'@onlinemall.test',
+                'email' => 'contact.'.$attempt.'.'.uniqid().'@gaisano-cordova.com',
             ]))->assertCreated();
         }
 
         $this->assertThrottled(
             $this->postJson('/api/contact', $this->contactPayload([
-                'email' => 'contact.blocked.'.uniqid().'@onlinemall.test',
+                'email' => 'contact.blocked.'.uniqid().'@gaisano-cordova.com',
             ])),
             'Contact form',
         );
@@ -106,7 +106,7 @@ class RateLimitSecurityTest extends TestCase
         for ($attempt = 1; $attempt <= 10; $attempt++) {
             $registered = $this->post('/api/auth/register', array_merge(
                 $this->registerPayload([
-                    'email' => 'ratelimit.'.$attempt.'.'.uniqid().'@onlinemall.test',
+                    'email' => 'ratelimit.'.$attempt.'.'.uniqid().'@gaisano-cordova.com',
                 ]),
                 $this->idDocuments(),
             ));
@@ -115,7 +115,7 @@ class RateLimitSecurityTest extends TestCase
         }
 
         $blocked = $this->post('/api/auth/register', array_merge(
-            $this->registerPayload(['email' => 'ratelimit.blocked.'.uniqid().'@onlinemall.test']),
+            $this->registerPayload(['email' => 'ratelimit.blocked.'.uniqid().'@gaisano-cordova.com']),
             $this->idDocuments(),
         ));
 

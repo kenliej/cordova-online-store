@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { Mail, Lock, ShoppingCart, Store, ShieldCheck, MapPin, CheckCircle2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getErrorMessage, getFieldErrors, isApiError, requestPasswordReset, resetPassword } from "@/lib/api";
@@ -8,9 +8,12 @@ import bgImage from "@/assets/bg-img1.webp";
 
 export default function ForgotPassword() {
   const [searchParams] = useSearchParams();
+  const params = useParams();
   const navigate = useNavigate();
 
-  const resetToken = searchParams.get("token") ?? "";
+  // The e-mail link is /reset-password/<token>?email=… ; keep support for the
+  // legacy /forgot-password?token=… query form too.
+  const resetToken = searchParams.get("token") ?? params.token ?? "";
   const resetEmail = searchParams.get("email") ?? "";
   const isResetMode = Boolean(resetToken);
 

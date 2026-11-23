@@ -247,7 +247,7 @@ class ExposureHeadersTest extends TestCase
     {
         ContactMessage::create([
             'name' => 'Private Sender',
-            'email' => 'private.sender@onlinemall.test',
+            'email' => 'private.sender@gaisano-cordova.com',
             'phone' => '09171234567',
             'subject' => 'Private',
             'message' => 'Sensitive message',

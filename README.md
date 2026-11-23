@@ -190,9 +190,10 @@ migrates + seeds a fresh database on first use, then starts:
 | http://127.0.0.1:8000/api/health | Laravel API health (database connectivity) |
 | http://127.0.0.1:5173/api/health | same health through the Vite proxy |
 
-Demo accounts: `admin@onlinemall.test / Admin#2026Secure`,
-`worker@onlinemall.test / Worker#2026Secure`,
-`customer@onlinemall.test / Customer#2026Secure`.
+Demo accounts (all `@gaisano-cordova.com`): `admin@`, `admin-kenlie@`,
+`admin-sherwynn@`, `admin-dudes@`, `admin-charlie@` and `worker@`,
+`worker-kenlie@`, `worker-sherwynn@`, `worker-dudes@`, `worker-charlie@`
+with password `admin@0912345`; `customer@` / `Customer#2026Secure`.
 
 ### Manual setup (two terminals)
 
@@ -282,14 +283,16 @@ The API also ships a token endpoint (`POST /api/auth/token`), a public media rou
 
 Seeded by `php artisan migrate --seed` / `db:seed`:
 
-| Role | Email | Password |
-|---|---|---|
-| Admin | `admin@onlinemall.test` | `Admin#2026Secure` |
-| Worker | `worker@onlinemall.test` | `Worker#2026Secure` |
-| Customer | `customer@onlinemall.test` | `Customer#2026Secure` |
+All demo accounts use the domain `@gaisano-cordova.com`.
 
-Additional seeded states: 2 pending registrations (with ID scans), more active customers,
-one removed customer, one banned customer, a second worker, 10 stores, 12 products
+| Role | Accounts | Password |
+|---|---|---|
+| Admin (5) | `admin@`, `admin-kenlie@`, `admin-sherwynn@`, `admin-dudes@`, `admin-charlie@` | `admin@0912345` |
+| Worker (5) | `worker@`, `worker-kenlie@`, `worker-sherwynn@`, `worker-dudes@`, `worker-charlie@` | `admin@0912345` |
+| Customer | `customer@` (active), plus `shermaine@`, `alex.smith@`, `pending1@`, `pending2@`, `removed.customer@`, `banned.customer@` | `Customer#2026Secure` |
+
+Additional seeded states: 2 pending registrations (with ID scans), 3 active customers,
+one removed and one banned customer, 5 admins, 5 workers, 10 stores, 12 products
 (some out of stock / new), 13 orders across today/-1/-2 days in all five statuses,
 notifications and contact messages.
 

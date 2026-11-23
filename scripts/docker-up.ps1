@@ -263,10 +263,10 @@ Write-Host "   API health   : http://localhost:$webPort/api/health" -ForegroundC
 Write-Host "   Mailpit      : http://127.0.0.1:$mailpitPort (password-reset e-mails)" -ForegroundColor Cyan
 Write-Host "   Database UI  : npm run docker:db-ui  ->  http://127.0.0.1:8081/?pgsql=db" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "   Demo accounts"
-Write-Host "     admin    : admin@onlinemall.test    / Admin#2026Secure"
-Write-Host "     worker   : worker@onlinemall.test   / Worker#2026Secure"
-Write-Host "     customer : customer@onlinemall.test / Customer#2026Secure"
+Write-Host "   Demo accounts (all @gaisano-cordova.com)"
+Write-Host "     admins   : admin@, admin-kenlie@, admin-sherwynn@, admin-dudes@, admin-charlie@  / admin@0912345"
+Write-Host "     workers  : worker@, worker-kenlie@, worker-sherwynn@, worker-dudes@, worker-charlie@  / admin@0912345"
+Write-Host "     customer : customer@gaisano-cordova.com / Customer#2026Secure"
 Write-Host ""
 Write-Host "   Common commands"
 Write-Host "     docker compose ps                     # container status"

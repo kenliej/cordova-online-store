@@ -96,7 +96,7 @@ class UploadSecurityTest extends TestCase
 
         // Registration ID upload must also reject SVG masquerading as PNG.
         $this->multipart('/api/auth/register', array_merge($this->registerPayload([
-            'email' => 'svg.'.uniqid().'@onlinemall.test',
+            'email' => 'svg.'.uniqid().'@gaisano-cordova.com',
         ]), [
             'id_front' => $renamedSvg,
             'id_back' => $this->fakePng('back.png'),
@@ -211,7 +211,7 @@ class UploadSecurityTest extends TestCase
         Storage::fake('public');
 
         $this->multipart('/api/auth/register', array_merge(
-            $this->registerPayload(['email' => 'private.ids.'.uniqid().'@onlinemall.test']),
+            $this->registerPayload(['email' => 'private.ids.'.uniqid().'@gaisano-cordova.com']),
             $this->idDocuments(),
         ))->assertCreated();
 

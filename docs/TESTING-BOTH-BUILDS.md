@@ -103,9 +103,11 @@ What you get:
 | http://127.0.0.1:8000/api/health | API health + PostgreSQL connectivity |
 | http://127.0.0.1:5173/api/health | health through the Vite proxy (same-origin cookie auth) |
 
-Demo accounts: `admin@onlinemall.test / Admin#2026Secure`,
-`worker@onlinemall.test / Worker#2026Secure`,
-`customer@onlinemall.test / Customer#2026Secure`.
+Demo accounts (all `@gaisano-cordova.com`): 5 admins + 5 workers
+(`admin@`, `admin-kenlie@`, `admin-sherwynn@`, `admin-dudes@`, `admin-charlie@`,
+`worker@`, `worker-kenlie@`, `worker-sherwynn@`, `worker-dudes@`, `worker-charlie@`)
+with password `admin@0912345`; customers use `Customer#2026Secure`
+(`customer@`, `shermaine@`, `alex.smith@`, `pending1@`, `pending2@`).
 
 Manual equivalent (two terminals): `scripts/start-local.ps1` only automates the
 commands shown in [README Quick start](../README.md#quick-start--local-development-no-docker).

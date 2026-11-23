@@ -19,8 +19,8 @@ class SeedDemoDataCommandTest extends TestCase
             ->assertSuccessful();
 
         $this->assertGreaterThan(0, User::query()->count());
-        $this->assertDatabaseHas('users', ['email' => 'admin@onlinemall.test']);
-        $this->assertDatabaseHas('users', ['email' => 'customer@onlinemall.test']);
+        $this->assertDatabaseHas('users', ['email' => 'admin@gaisano-cordova.com']);
+        $this->assertDatabaseHas('users', ['email' => 'customer@gaisano-cordova.com']);
     }
 
     public function test_it_is_idempotent_and_does_not_duplicate_demo_data(): void
