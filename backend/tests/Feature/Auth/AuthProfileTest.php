@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Auth;
 
+use App\Enums\UserStatus;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -112,6 +113,29 @@ class AuthProfileTest extends TestCase
 
         $response->assertOk();
         $this->assertTrue(Hash::check('NewPassword#2026', $user->refresh()->password));
+    }
+
+    public function test_approved_customer_can_upload_a_profile_photo_after_approval(): void
+    {
+        Storage::fake('public');
+
+        $pending = User::factory()->customer()->pending()->create(['profile_photo_path' => null]);
+        $admin = User::factory()->admin()->create();
+
+        $this->actingAs($admin)
+            ->postJson('/api/admin/accounts/'.$pending->id.'/approve')
+            ->assertOk();
+
+        $this->assertSame(UserStatus::Active, $pending->fresh()->status);
+        $this->assertNull($pending->fresh()->profile_photo_path);
+
+        $this->actingAs($pending->fresh())
+            ->post('/api/profile/avatar', ['avatar' => $this->fakePng('avatar.png')])
+            ->assertOk()
+            ->assertJsonPath('data.profile_photo_url', static fn ($url) => is_string($url) && str_contains((string) $url, '/storage/'));
+
+        $this->assertNotNull($pending->fresh()->profile_photo_path);
+        $this->assertTrue(Storage::disk('public')->exists($pending->fresh()->profile_photo_path));
     }
 
     public function test_avatar_upload_stores_on_public_disk_and_returns_url(): void

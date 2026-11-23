@@ -42,7 +42,7 @@ This project adds and integrates:
 
 | Domain | Capabilities |
 |---|---|
-| Auth & accounts | Register (profile photo + 2 government IDs, 18+ check, admin approval), login by email **or** phone, logout, forgot/reset password, remember-me |
+| Auth & accounts | Register (2 government IDs, 18+ check, default avatar, admin approval), login by email **or** phone, logout, forgot/reset password, remember-me |
 | Customer profile | View/update profile, change password, upload avatar, private ID-document download (owner/admin only) |
 | Public catalog | Products (category/search/price sort/stock filters, pagination), product detail (gallery, highlights, related), stores (open/closed filter), store detail (gallery, highlights, products), home collections |
 | Cart & checkout | Per-user cart, quantity/selection, stock validation, transactional checkout with row locks and price snapshots |

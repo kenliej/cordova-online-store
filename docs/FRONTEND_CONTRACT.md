@@ -282,7 +282,7 @@ Type source `AccountsDashboard.tsx:26-37`; rendered `:284-313`; mock `:56-59`.
 | `idOneUrl?`/`idTwoUrl?` | URL string | not passed by caller | View ID modal |
 
 Also required by the pending record (from the registration form, not present on the admin card): `fullName` (a.k.a.
-`name`), `birthday`, government ID #1 and #2 files, password, `agreeTerms`, and the profile photo. The admin list
+`name`), `birthday`, government ID #1 and #2 files, password and `agreeTerms`. No profile photo is collected at registration - the account shows a built-in default avatar and the customer can upload one from their profile after admin approval. The admin list
 shows 6 text fields + 1 photo; **it does not show the two ID thumbnails on the card** (only via View ID modal).
 
 ### 2.3 Worker account (`WorkerAccount`)
@@ -1179,7 +1179,7 @@ formatting. See §9.3.
 - Uploads today create **blob object URLs** via `URL.createObjectURL` (`EditProductModal.tsx:70`,
   `AdminStoreModal.tsx:74`, `AddNewProductModal.tsx:55`) — these must be replaced with real multipart uploads; the API
   should return absolute `/storage/...` URLs (or signed URLs) that the `<img src>` can consume directly.
-- Registration IDs (`idOne`, `idTwo`) and profile photo need **private** storage + short-lived signed URLs for admin
+- Registration IDs (`idOne`, `idTwo`) need **private** storage + short-lived signed URLs for admin
   View-ID (`ViewIdModal.tsx`), not public URLs.
 - Fallback images hardcoded when a URL is missing: `EditProductModal`/`WorkerProductCard`
   `https://images.unsplash.com/photo-1584917865442-de89df76afd3?w=400...` (`WorkerProductCard.tsx:57`),
@@ -1435,7 +1435,7 @@ plaintext), `worker_code` uniqueness.
 | Pagination | `?page=&per_page=` (default 20, ≤50/100); UI count labels read `meta.total` |
 | Filtering | Query params per §5.8 / §9.5; server-side mandatory (client-side `includes()` logic removed) |
 | Sorting | `sort=price_asc\|price_desc\|newest` (whitelist) |
-| Uploads | `multipart/form-data`; registration `profile_photo`, `id_front`, `id_back`; profile `avatar`; product `images[]` (≤3); store `image`; IDs on **private** disk, served only via authorized route; whitelist jpg/jpeg/png/webp |
+| Uploads | `multipart/form-data`; registration `id_front`, `id_back`; profile `avatar` (available after approval); product `images[]` (≤3); store `image`; IDs on **private** disk, served only via authorized route; whitelist jpg/jpeg/png/webp |
 | Status codes | 200/201/204; 401; 403 `{message, code}`; 404 (IDOR scoping per architecture §6.1); 409 `{message, code}` for domain conflicts; 422 validation; 429 throttled |
 | Rate limits | login 5/min, register 10/h, forgot 5/min, contact 3/h, checkout 30/min (architecture §6.12) |
 | Dates | ISO-8601 timestamps (`Asia/Manila`), `YYYY-MM-DD` date fields; UI formats `m/d/Y` |
@@ -2265,7 +2265,7 @@ conflicts with ARCH, **ARCH wins** and this section describes the resulting UI-s
 | Auth mechanism | none; local `rememberMe` | Sanctum **SPA cookie** flow: `GET /sanctum/csrf-cookie` → `POST /api/auth/login`; HttpOnly session; DB sessions; 120-min lifetime | `AuthContext` bootstrap via `GET /api/auth/me`; no token storage; `remember` forwarded |
 | Login payload | `{ emailOrPhone, password, rememberMe }` | `{ login, password, remember }` (login = email **or** phone) | Map in `api.ts`; keep the “Email or Phone Number” label |
 | Login errors | nothing | 403 `{message, code}` with `code = account_pending\|account_removed\|account_banned`; 401 `{message}` | Render `message`; redirect based on `user.role` (customer `/`, worker `/worker/orders`, admin `/admin/accounts`) |
-| Register payload | `fullName, email, phoneNumber, address, birthday, password, confirmPassword, idOne, idTwo, agreeTerms` (+ unwired photo) | multipart `name, email, phone, address, birthday, gender?, password, password_confirmation, profile_photo?, id_front, id_back, agree_terms` | Rename fields in the submit; wire the profile-picture input; show server 422 per-field |
+| Register payload | `fullName, email, phoneNumber, address, birthday, password, confirmPassword, idOne, idTwo, agreeTerms` | multipart `name, email, phone, address, birthday, gender?, password, password_confirmation, id_front, id_back, agree_terms` | Rename fields in the submit; no profile photo is sent at registration (default avatar; profile upload after approval); show server 422 per-field |
 | Password policy | no hint | min 12 chars, mixed case + numbers, bcrypt 12 | Add hint + client validation in Register/Change Password |
 | Logout | dead `/logout` link | `POST /api/auth/logout` → 204 | Add handler + `/logout` route or button onClick; redirect `/login` |
 | Forgot / reset | OTP-style “Verification Code Sent!” card only; no reset screen | Laravel password broker: `POST /api/auth/forgot-password {email}` (always 200, email link) → `POST /api/auth/reset-password {token,email,password,password_confirmation}` | **UI change required:** either build a reset-password screen reading `token` from the email link URL, or ask backend-auth to add a code-verify endpoint. Phone-based reset is not in ARCH (UI allows phone → mismatch to resolve) |

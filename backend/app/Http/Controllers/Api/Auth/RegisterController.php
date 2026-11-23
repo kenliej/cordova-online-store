@@ -21,7 +21,7 @@ class RegisterController extends Controller
 
         AuditLogger::log('account.register', $user, [
             'role' => 'customer',
-            'has_profile_photo' => $user->profile_photo_path !== null,
+            'profile_photo' => 'default',
         ]);
 
         return $this->created(

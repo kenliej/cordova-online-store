@@ -116,7 +116,7 @@ Legend: 🔓 public · 👤 any auth · 🧑 customer · 🛠 worker · 👑 adm
 ### Auth & profile (backend-auth)
 | Method | Path | Access | Notes |
 |---|---|---|---|
-| POST | `/auth/register` | 🔓 | multipart: name,email,phone,address,birthday,gender?,password,password_confirmation,profile_photo?,id_front,id_back,agree_terms(bool). throt. 10/h. 201 → `{data:{message}}`, status pending |
+| POST | `/auth/register` | 🔓 | multipart: name,email,phone,address,birthday,gender?,password,password_confirmation,id_front,id_back,agree_terms(bool). throt. 10/h. 201 → `{data:{message}}`, status pending, default avatar (no profile photo at registration; active customers upload via `/profile/avatar`) |
 | POST | `/auth/login` | 🔓 | `{login,password,remember}`; 403 codes: account_pending/account_removed/account_banned; 422 invalid |
 | POST | `/auth/token` | 🔓 | Bearer-token login for cross-origin SPAs: same body + optional `device_name`; returns `{token,token_type,expires_at,abilities,user}`; token revoked on logout/ban; throttled like login |
 | POST | `/auth/logout` | 👤 | 204 |

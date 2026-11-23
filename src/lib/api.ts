@@ -160,6 +160,12 @@ const RAW_API_BASE = (
 
 const BASE_URL = RAW_API_BASE || "/api";
 
+/**
+ * Built-in avatar shown to accounts that have not uploaded a profile photo yet
+ * (e.g. every customer immediately after registration/approval).
+ */
+export const DEFAULT_AVATAR_URL = "/default-avatar.svg";
+
 function isAbsoluteUrl(url: string): boolean {
   return /^https?:\/\//i.test(url);
 }
@@ -569,7 +575,9 @@ export function mapAuthUser(rawValue: unknown): AuthUser {
     gender: toStr(raw.gender) || null,
     birthday: toStr(raw.birthday) || null,
     address: toStr(raw.address) || null,
-    profilePhoto: mediaUrl(raw.profile_photo_url ?? raw.profile_photo ?? raw.avatar_url ?? raw.profile_photo_path) || null,
+    profilePhoto:
+      mediaUrl(raw.profile_photo_url ?? raw.profile_photo ?? raw.avatar_url ?? raw.profile_photo_path) ||
+      DEFAULT_AVATAR_URL,
     badRecords: toNum(raw.bad_records, 0),
     storeId: toNumOrNull(raw.store_id),
     lastLoginAt: toStr(raw.last_login_at) || null,
@@ -1079,7 +1087,6 @@ export async function registerAccount(payload: RegisterPayload): Promise<Registe
     password: payload.password,
     password_confirmation: payload.passwordConfirmation,
     agree_terms: payload.agreeTerms,
-    profile_photo: payload.profilePhoto ?? undefined,
     id_front: payload.idFront,
     id_back: payload.idBack,
   });

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { Link } from "react-router";
 import {
   User,
@@ -13,7 +13,6 @@ import {
   ShoppingCart,
   Store,
   ShieldCheck,
-  Camera,
   AlertCircle,
   CheckCircle2,
   ImagePlus,
@@ -49,11 +48,8 @@ const EMPTY_FORM: RegisterForm = {
 
 export default function Register() {
   const { register } = useAuth();
-  const profileInputRef = useRef<HTMLInputElement>(null);
 
   const [formData, setFormData] = useState<RegisterForm>(EMPTY_FORM);
-  const [profilePhoto, setProfilePhoto] = useState<File | null>(null);
-  const [profilePreview, setProfilePreview] = useState("");
   const [idOne, setIdOne] = useState<File | null>(null);
   const [idTwo, setIdTwo] = useState<File | null>(null);
 
@@ -66,16 +62,9 @@ export default function Register() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [successMessage, setSuccessMessage] = useState("");
 
-  // Object-URL preview lifecycle.
-  useEffect(() => {
-    if (!profilePhoto) {
-      setProfilePreview("");
-      return;
-    }
-    const url = URL.createObjectURL(profilePhoto);
-    setProfilePreview(url);
-    return () => URL.revokeObjectURL(url);
-  }, [profilePhoto]);
+  // Object-URL preview lifecycle for the two ID images is handled by the
+  // uploader inputs below; registration intentionally collects no profile photo
+  // (a built-in default avatar is shown until the approved customer uploads one).
 
   const setField = (field: keyof RegisterForm, value: string) => {
     setFormData((current) => ({ ...current, [field]: value }));
@@ -85,18 +74,6 @@ export default function Register() {
       delete next[field];
       return next;
     });
-  };
-
-  const handleProfilePhoto = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0] ?? null;
-    event.target.value = "";
-    if (!file) return;
-    if (file.size > 2 * 1024 * 1024) {
-      setError("Profile photo must be 2MB or smaller.");
-      return;
-    }
-    setError("");
-    setProfilePhoto(file);
   };
 
   const validate = (): boolean => {
@@ -139,7 +116,6 @@ export default function Register() {
         gender: formData.gender.trim() || undefined,
         password: formData.password,
         passwordConfirmation: formData.confirmPassword,
-        profilePhoto,
         idFront: idOne,
         idBack: idTwo,
         agreeTerms,
@@ -295,39 +271,9 @@ export default function Register() {
                   </div>
                 )}
 
-                {/* Profile Picture Uploader Preview */}
-                <div className="flex items-center space-x-4 bg-white/80 p-3 rounded-2xl border border-gray-200 shadow-xs">
-                  <button
-                    type="button"
-                    onClick={() => profileInputRef.current?.click()}
-                    className="w-12 h-12 rounded-full bg-sky-100 text-[#3087C5] flex items-center justify-center shrink-0 border-2 border-[#3087C5]/30 relative overflow-hidden"
-                    aria-label="Upload profile picture"
-                  >
-                    {profilePreview ? (
-                      <img src={profilePreview} alt="Profile preview" className="w-full h-full object-cover" />
-                    ) : (
-                      <User className="w-6 h-6" />
-                    )}
-                    <span className="absolute inset-0 bg-black/30 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
-                      <Camera className="w-4 h-4 text-white" />
-                    </span>
-                  </button>
-                  <input
-                    ref={profileInputRef}
-                    type="file"
-                    accept="image/png,image/jpeg,image/webp"
-                    className="hidden"
-                    onChange={handleProfilePhoto}
-                  />
-                  <div>
-                    <p className="text-xs font-black text-gray-900">
-                      {profilePhoto ? profilePhoto.name : "Insert Profile Picture"}
-                    </p>
-                    <p className="text-[11px] text-gray-500 font-medium">
-                      {fieldError("profile_photo") || "Click avatar to upload image (max 2MB)"}
-                    </p>
-                  </div>
-                </div>
+                {/* Profile photos are not collected at registration: the account
+                    shows a default avatar until the customer changes it from
+                    Profile after admin approval. */}
 
                 <form id="register-form" onSubmit={handleRegister} className="space-y-3.5" noValidate>
                   {/* Full Name */}

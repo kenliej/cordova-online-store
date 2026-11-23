@@ -88,7 +88,6 @@ export interface RegisterPayload {
   gender?: string;
   password: string;
   passwordConfirmation: string;
-  profilePhoto?: File | null;
   idFront: File;
   idBack: File;
   agreeTerms: boolean;

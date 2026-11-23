@@ -10,8 +10,10 @@ use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 
 /**
- * Customer self-registration: multipart form with profile photo (optional) and
- * two government ID scans (required, private disk).
+ * Customer self-registration: multipart form with two government ID scans
+ * (required, private disk). No profile photo is collected at registration; the
+ * customer gets the default avatar and can upload one from their profile after
+ * admin approval.
  */
 class RegisterRequest extends FormRequest
 {
@@ -60,7 +62,6 @@ class RegisterRequest extends FormRequest
             'gender' => ['nullable', 'string', 'max:40'],
             'password' => ['required', 'string', 'confirmed', Password::defaults()],
             'agree_terms' => ['required', 'accepted'],
-            'profile_photo' => ['nullable', 'image', self::IMAGE_MIMES, 'max:2048'],
             'id_front' => ['required', 'image', self::IMAGE_MIMES, 'max:5120'],
             'id_back' => ['required', 'image', self::IMAGE_MIMES, 'max:5120'],
         ];
@@ -78,7 +79,6 @@ class RegisterRequest extends FormRequest
             'id_back.required' => 'The second valid ID image is required.',
             'id_front.max' => 'Each ID image may not be larger than 5MB.',
             'id_back.max' => 'Each ID image may not be larger than 5MB.',
-            'profile_photo.max' => 'The profile photo may not be larger than 2MB.',
         ];
     }
 
@@ -102,11 +102,6 @@ class RegisterRequest extends FormRequest
             'address' => $data['address'],
             'bad_records' => 0,
         ]);
-
-        if ($this->hasFile('profile_photo')) {
-            $path = $this->file('profile_photo')->store('profile-photos/'.$user->getKey(), 'public');
-            $user->forceFill(['profile_photo_path' => $path])->save();
-        }
 
         foreach (['id_front', 'id_back'] as $type) {
             $file = $this->file($type);

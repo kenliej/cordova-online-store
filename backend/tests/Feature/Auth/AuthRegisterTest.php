@@ -40,15 +40,13 @@ class AuthRegisterTest extends TestCase
         ];
     }
 
-    public function test_registration_creates_pending_customer_with_private_id_documents(): void
+    public function test_registration_creates_pending_customer_with_private_id_documents_and_default_avatar(): void
     {
-        Storage::fake('public');
         Storage::fake('private');
 
         $response = $this->stateful()->post('/api/auth/register', array_merge(
             $this->payload(),
             $this->documents(),
-            ['profile_photo' => $this->fakePng('avatar.png')],
         ));
 
         $response->assertCreated()
@@ -64,12 +62,32 @@ class AuthRegisterTest extends TestCase
         $this->assertSame('image/png', $user->idDocuments->first()->mime);
         $this->assertTrue(Storage::disk('private')->exists($user->idDocuments->first()->path));
         $this->assertCount(2, Storage::disk('private')->allFiles());
-        $this->assertNotNull($user->profile_photo_url);
-        $this->assertStringContainsString('/storage/', $user->profile_photo_url);
+        // Registration never stores a profile photo: the SPA shows the built-in
+        // default avatar until the customer uploads one after approval.
+        $this->assertNull($user->profile_photo_path);
         $this->assertDatabaseHas('audit_logs', ['action' => 'account.register']);
 
         // Registration must not log the user in (admin approval required).
         $this->assertGuest();
+    }
+
+    public function test_registration_ignores_a_profile_photo_submitted_by_clients(): void
+    {
+        Storage::fake('public');
+        Storage::fake('private');
+
+        $response = $this->stateful()->post('/api/auth/register', array_merge(
+            $this->payload(),
+            $this->documents(),
+            ['profile_photo' => $this->fakePng('avatar.png')],
+        ));
+
+        $response->assertCreated();
+
+        $user = User::query()->where('email', 'new.customer@example.test')->firstOrFail();
+
+        $this->assertNull($user->profile_photo_path);
+        $this->assertCount(0, Storage::disk('public')->allFiles());
     }
 
     public function test_registration_requires_adult_age(): void

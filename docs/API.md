@@ -86,7 +86,7 @@ Blocked accounts return `403` with `code`: `account_pending` | `account_rejected
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| POST | `/auth/register` | — | multipart: `name,email,phone,address,birthday,gender?,password,password_confirmation,profile_photo?,id_front,id_back,agree_terms`; **10/hour/IP**; `201` pending (no session) |
+| POST | `/auth/register` | — | multipart: `name,email,phone,address,birthday,gender?,password,password_confirmation,id_front,id_back,agree_terms`; **10/hour/IP**; `201` pending (no session, default avatar; photo can be set from `/profile/avatar` after approval) |
 | POST | `/auth/login` | — | `{login,password,remember}`; **5/min** per identifier+IP |
 | POST | `/auth/token` | — | cross-origin Bearer-token login (same body + `device_name`); **5/min** |
 | POST | `/auth/logout` | any | ends session; `204` |
