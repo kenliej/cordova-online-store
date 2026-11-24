@@ -85,6 +85,50 @@ Result from `neon:probe`:
 Health check through the running container: `GET /api/health` -> HTTP 200
 `{"status":"ok","database":"ok"}`. Frontend `npm run build` passes.
 
+## Mailpit vs production email
+
+**Mailpit runs only in local Docker** (`docker-compose.yml`, http://127.0.0.1:8025).
+It is an SMTP sink for development; **do not deploy it to Render**.
+
+- Render exposes HTTP ports only, and the API connects to Mailpit over SMTP, so a
+  Render-hosted Mailpit is not reachable in the way the app needs.
+- Production emails (password resets) must use a **real SMTP account**:
+  - cPanel mailbox: host `mail.yourdomain.com`, port `587` (`MAIL_SCHEME=smtp`) or
+    `465` (`MAIL_SCHEME=smtps`), username = full email address
+  - Gmail: `smtp.gmail.com`, port `587`, Gmail **app password**
+  - or Resend/Mailgun/Brevo SMTP credentials
+- Set these in Render (the Blueprint prompts for them):
+  `MAIL_MAILER=smtp`, `MAIL_HOST`, `MAIL_PORT`, `MAIL_SCHEME`,
+  `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_FROM_ADDRESS`.
+- Local Docker keeps using Mailpit; only the Render service uses real SMTP.
+
+## Deploy the frontend on Vercel
+
+Push the **whole repository** to GitHub. Vercel and Render can both use it:
+Vercel builds only the frontend from the repo root; Render builds only the
+backend via `render.yaml` + `production/Dockerfile`.
+
+In Vercel: **Add New Project -> import the repo** (no Root Directory change;
+framework auto-detected as Vite, `vercel.json` supplies build settings).
+
+Environment Variables (Production, Preview, Development):
+
+```dotenv
+VITE_API_BASE_URL=https://<render-service>.onrender.com/api
+VITE_AUTH_MODE=token
+```
+
+Then **Deploy**. Vercel runs `npm run build` and serves `dist/`.
+
+Do not upload `backend/`, `production/`, `dist-deploy/`, or `.env` manually;
+Vercel does not need them. If you prefer the CLI, this repo's
+`npm run package:deploy` creates `dist-deploy/vercel/`, which can be deployed
+with `vercel deploy --prod dist-deploy/vercel`, but Git integration is simpler.
+
+Finally, set Render's `APP_FRONTEND_URL` and `CORS_ALLOWED_ORIGINS` to the exact
+Vercel URL (e.g. `https://gaisano-onlinemall.vercel.app`), redeploy Render, then
+open the Vercel app and log in with a seeded/created admin account.
+
 ## Known limitations
 
 - **Uploads:** Render's free filesystem is ephemeral; the app still stores uploads

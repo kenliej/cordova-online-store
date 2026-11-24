@@ -120,9 +120,22 @@ services:
       - key: NEON_REALTIME_SECRET
         sync: false
 
-      # --- Mail (set real SMTP values in the dashboard) --------------------
+      # --- Mail: real SMTP (Mailpit is local-development only) -------------
+      # Fill these from your email provider (cPanel mailbox, Gmail app
+      # password, Resend, Mailgun, ...). For port 465 use MAIL_SCHEME=smtps;
+      # for port 587 use MAIL_SCHEME=smtp.
       - key: MAIL_MAILER
-        value: log
+        value: smtp
+      - key: MAIL_HOST
+        sync: false
+      - key: MAIL_PORT
+        sync: false
+      - key: MAIL_SCHEME
+        sync: false
+      - key: MAIL_USERNAME
+        sync: false
+      - key: MAIL_PASSWORD
+        sync: false
       - key: MAIL_FROM_ADDRESS
         value: no-reply@gaisano-cordova.com
       - key: MAIL_FROM_NAME
