@@ -6,11 +6,16 @@
     Checks Docker, creates/repairs the root .env (APP_KEY, DB_PASSWORD), builds and
     starts PostgreSQL + Laravel API + nginx frontend + queue/scheduler/Mailpit, waits
     for the app to become healthy and seeds demo data only when the database is empty.
+    It also starts Adminer, the optional database web UI.
 
     URLs afterwards:
       http://localhost:8080        application (frontend + API, same origin)
       http://localhost:8025        Mailpit (password-reset e-mails)
+      http://127.0.0.1:8081/?pgsql=db   Adminer (database web UI)
       http://localhost:8080/api/health
+
+.PARAMETER NoDbUi
+    Do not start Adminer (the database web UI). Start it later with `npm run docker:db-ui`.
 
 .PARAMETER Reset
     Delete the database/uploads volumes and start clean (demo data is reseeded).
@@ -46,6 +51,7 @@ param(
     [switch]$Logs,
     [switch]$SkipBuild,
     [switch]$DryRun,
+    [switch]$NoDbUi,
     [string]$EnvFile = ""
 )
 
@@ -190,6 +196,8 @@ $webPort = Get-EnvValue $EnvFile "WEB_PORT"
 if (-not $webPort) { $webPort = "8080" }
 $mailpitPort = Get-EnvValue $EnvFile "MAILPIT_UI_PORT"
 if (-not $mailpitPort) { $mailpitPort = "8025" }
+$adminerPort = Get-EnvValue $EnvFile "ADMINER_PORT"
+if (-not $adminerPort) { $adminerPort = "8081" }
 
 if ($Down) {
     Write-Step "Stopping the stack (database volume is kept)"
@@ -220,6 +228,9 @@ if (-not $SkipBuild) { $upArguments += "--build" }
 $null = Invoke-Compose $upArguments
 
 if ($DryRun) {
+    if (-not $NoDbUi) {
+        Write-Host "  [dry-run] docker compose --profile tools up -d adminer" -ForegroundColor DarkGray
+    }
     Write-Step "Dry run complete"
     Write-Host "  No containers were started. Run without -DryRun to start the stack."
     exit 0
@@ -253,6 +264,17 @@ Write-Host "  application is healthy" -ForegroundColor Green
 Write-Step "Seeding demo data (only when the database is empty)"
 $null = Invoke-Compose @("exec", "-T", "app", "php", "artisan", "app:seed-demo", "--force")
 
+# --- optional database web UI ------------------------------------------------
+if (-not $NoDbUi) {
+    Write-Step "Starting the database web UI (Adminer)"
+    try {
+        $null = Invoke-Compose @("--profile", "tools", "up", "-d", "adminer")
+    } catch {
+        Write-Host "  warning: Adminer could not start: $($_.Exception.Message)" -ForegroundColor Yellow
+        Write-Host "  The app is still running; start it later with: npm run docker:db-ui" -ForegroundColor DarkGray
+    }
+}
+
 # --- summary -----------------------------------------------------------------
 Write-Host ""
 Write-Host "  ============================================================" -ForegroundColor Green
@@ -261,7 +283,11 @@ Write-Host "  ============================================================" -For
 Write-Host "   App          : http://localhost:$webPort" -ForegroundColor Cyan
 Write-Host "   API health   : http://localhost:$webPort/api/health" -ForegroundColor Cyan
 Write-Host "   Mailpit      : http://127.0.0.1:$mailpitPort (password-reset e-mails)" -ForegroundColor Cyan
-Write-Host "   Database UI  : npm run docker:db-ui  ->  http://127.0.0.1:8081/?pgsql=db" -ForegroundColor Cyan
+if ($NoDbUi) {
+    Write-Host "   Database UI  : not started (-NoDbUi); run  npm run docker:db-ui" -ForegroundColor Yellow
+} else {
+    Write-Host "   Database UI  : http://127.0.0.1:$adminerPort/?pgsql=db" -ForegroundColor Cyan
+}
 Write-Host ""
 Write-Host "   Demo accounts (all @gaisano-cordova.com)"
 Write-Host "     admins   : admin@, admin-kenlie@, admin-sherwynn@, admin-dudes@, admin-charlie@  / admin@0912345"

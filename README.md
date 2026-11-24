@@ -141,7 +141,7 @@ Open:
 | http://localhost:8025 | Mailpit — password-reset e-mails |
 | http://localhost:8080/admin/accounts | Admin area (after logging in as admin) |
 | http://127.0.0.1:8025 | Mailpit — password-reset e-mails |
-| http://127.0.0.1:8081/?pgsql=db | Database web UI (Adminer) — start with `npm run docker:db-ui` |
+| http://127.0.0.1:8081/?pgsql=db | Database web UI (Adminer) — started automatically by `npm run docker:up` (or `npm run docker:db-ui`) |
 
 Database UI login: System **PostgreSQL**, Server `db`, User `onlinemall`,
 Password = `DB_PASSWORD` from `.env`, Database `online_mall`.

@@ -153,11 +153,15 @@ PostgreSQL and runs `php artisan migrate --force` on every start.
 
 ### Browse the database in your browser (Adminer - easiest)
 
-A web UI is included as an optional container (it does not start with the normal stack):
+A web UI is included. **`npm run docker:up` starts it automatically**; if it is not
+running (e.g. you stopped it, or Docker Desktop restarted), start it with:
 
 ```powershell
 npm run docker:db-ui
+# or: docker compose --profile tools up -d adminer
 ```
+
+To skip it when starting the stack: `npm run docker:up -- -NoDbUi`.
 
 Open **http://127.0.0.1:8081/?pgsql=db** (the link preselects PostgreSQL and the server).
 
@@ -303,7 +307,8 @@ instant reload, run Vite locally against the Docker backend:
 |---|---|
 | `docker: command not found` | Docker Desktop not installed, or terminal opened before install. Install, then reopen PowerShell. |
 | `Cannot connect to the Docker daemon` / `error during connect` | Docker Desktop is not running. Start it and wait for "Engine running". |
-| `WSL2 is not installed` / virtualization error | Enable virtualization in the BIOS, run `wsl --update`, restart, then reopen Docker Desktop. |
+| WSL2/virtualization error | Enable virtualization in the BIOS, run `wsl --update`, restart, then reopen Docker Desktop. |
+| http://127.0.0.1:8081 (Adminer) not reachable | Adminer is not running (it is a separate optional container). Run `npm run docker:db-ui`, or `npm run docker:up` which starts it automatically. Check with `docker compose ps adminer`. |
 | `port is already allocated` for 8080 | Something else uses 8080. Set `WEB_PORT=8081` in `.env`, rerun `npm run docker:up`, use http://localhost:8081. |
 | `APP_KEY is required` or `DB_PASSWORD is required` | `.env` is missing values. Delete/rename `.env` and run `npm run docker:up` again (it regenerates them), or fill them manually. |
 | Health never becomes ready | `docker compose ps` + `docker compose logs --tail=100 app db web`. First build is slow; also check Docker Desktop has enough memory (Settings -> Resources, 4 GB+). |
@@ -320,7 +325,8 @@ instant reload, run Vite locally against the Docker backend:
 ## Security notes for this local stack
 
 - `.env` contains local secrets (APP_KEY, DB password). It is git-ignored - never commit it.
-- Only `8080` and Mailpit on `127.0.0.1:8025` are published; PostgreSQL is internal-only.
+- Port `8080` is published for the app; Mailpit (`8025`) and Adminer (`8081`) are bound to
+  `127.0.0.1` only, and PostgreSQL is internal-only.
 - This is a production-like local stack: `APP_ENV=production`, `APP_DEBUG=false`,
   `SESSION_SECURE_COOKIE=false` (because it runs on http). For a real server: use HTTPS,
   set `SESSION_SECURE_COOKIE=true`, `APP_FORCE_HTTPS=true`, and change all passwords.
