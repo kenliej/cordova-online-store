@@ -48,8 +48,10 @@ services:
         value: "5432"
       - key: DB_SSLMODE
         value: require
-      # Pooled connection for requests; direct connection is used automatically
-      # by production/start.sh for migrations.
+      # Neon database URLs. Use the DIRECT (unpooled) URL. If both are provided,
+      # production/start.sh switches the app and migrations to
+      # DATABASE_URL_UNPOOLED: Neon's transaction pooler caused aborted Laravel
+      # transactions (SQLSTATE 25P02) during registration on Render.
       - key: DATABASE_URL
         sync: false
       - key: DATABASE_URL_UNPOOLED

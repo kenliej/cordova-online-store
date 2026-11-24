@@ -35,8 +35,10 @@ sed -i 's/\r$//' /etc/nginx/nginx.conf.template
 
 php artisan config:clear >/dev/null 2>&1 || true
 
-# Migrations must use Neon's direct (unpooled) connection; the app runs on the
-# pooled connection for normal request traffic.
+# Migrations must use Neon's direct (unpooled) connection. The app also runs on
+# the direct connection: Neon's transaction pooler left aborted transactions
+# (SQLSTATE 25P02) during multi-statement Laravel transactions such as
+# registration, so this single long-lived Render service avoids the pooler.
 if [ "${RUN_MIGRATIONS:-true}" = "true" ] && [ "${APP_ENV:-production}" = "production" ]; then
     echo "[start] running database migrations (direct connection)"
     if [ -n "${DATABASE_URL_UNPOOLED:-}" ]; then
@@ -44,6 +46,12 @@ if [ "${RUN_MIGRATIONS:-true}" = "true" ] && [ "${APP_ENV:-production}" = "produ
     else
         php artisan migrate --force --no-interaction
     fi
+fi
+
+if [ -n "${DATABASE_URL_UNPOOLED:-}" ]; then
+    export DATABASE_URL="${DATABASE_URL_UNPOOLED}"
+    export DB_URL="${DATABASE_URL_UNPOOLED}"
+    echo "[start] using direct Neon connection for the app"
 fi
 
 php artisan storage:link --force >/dev/null 2>&1 || true

@@ -33,11 +33,14 @@ Render web service (production/Dockerfile: nginx + php-fpm)
    - `APP_URL`: `https://<service-name>.onrender.com`
    - `APP_FRONTEND_URL`: the Vercel URL (no trailing slash)
    - `CORS_ALLOWED_ORIGINS`: the Vercel URL
-   - `DATABASE_URL` (pooled), `DATABASE_URL_UNPOOLED` (direct)
+   - `DATABASE_URL`: the Neon **direct / unpooled** URL (no `-pooler` in the host).
+   - `DATABASE_URL_UNPOOLED`: the same **direct** URL. `start.sh` prefers this
+     variable and uses it for migrations and app requests; if only
+     `DATABASE_URL` is set, it must already be the direct URL.
    - `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_ENDPOINT_URL_S3`, `AWS_REGION`
    - `NEON_AI_GATEWAY_BASE_URL`, `NEON_AI_GATEWAY_TOKEN`
    - `NEON_REALTIME_URL`, `NEON_REALTIME_SECRET`
-4. Deploy. The container runs migrations with the direct Neon URL, then starts on
+4. Deploy. The container runs migrations on the direct Neon URL, then starts on
    Render's `$PORT` (default 10000).
 5. Verify: `https://<service>.onrender.com/api/health` returns
    `{"data":{"status":"ok","database":"ok",...}}`.
@@ -153,6 +156,22 @@ TRUSTED_HOSTS=gaisano-onlinemall-api.onrender.com,localhost,127.0.0.1
 
 Comma-separate exact hosts only. If you rename the service or add a custom
 domain, add that exact hostname here and redeploy.
+
+## Troubleshooting: `SQLSTATE[25P02]: In failed sql transaction: current transaction is aborted`
+
+This was seen on registration when the app connected through Neon's **pooled**
+(`-pooler`) host. A multi-statement Laravel transaction (create user + ID
+documents) can inherit an aborted transaction from the transaction pooler.
+
+The fix is already in `production/start.sh`: after migrations it exports
+`DATABASE_URL`/`DB_URL` from `DATABASE_URL_UNPOOLED`, and the Render Blueprint
+asks for the **direct** Neon URL in both database variables.
+
+- New deployments: paste the Neon **direct/unpooled** URL into both
+  `DATABASE_URL` and `DATABASE_URL_UNPOOLED`.
+- Existing deployments: ensure `DATABASE_URL_UNPOOLED` (direct) is set; the
+  start script switches the app to it automatically after migrations.
+- Do not use the `-pooler` URL for Render.
 
 ## Known limitations
 
