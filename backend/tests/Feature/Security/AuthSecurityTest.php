@@ -206,6 +206,26 @@ class AuthSecurityTest extends TestCase
         );
     }
 
+    public function test_password_reset_is_disabled_when_flag_is_off(): void
+    {
+        config(['auth.password_reset_enabled' => false]);
+
+        $user = User::factory()->create(['email' => 'disabled.reset@gaisano-cordova.com']);
+        $token = Password::broker()->createToken($user);
+
+        $this->postJson('/api/auth/forgot-password', ['email' => $user->email])
+            ->assertNotFound();
+
+        $this->postJson('/api/auth/reset-password', [
+            'token' => $token,
+            'email' => $user->email,
+            'password' => 'NewStrong#2026Pass',
+            'password_confirmation' => 'NewStrong#2026Pass',
+        ])->assertNotFound();
+
+        $this->assertFalse(Hash::check('NewStrong#2026Pass', $user->fresh()->password));
+    }
+
     public function test_password_reset_email_links_to_the_spa_reset_page(): void
     {
         Notification::fake();

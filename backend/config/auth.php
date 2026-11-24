@@ -103,6 +103,18 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Password Reset Availability
+    |--------------------------------------------------------------------------
+    |
+    | Production deployments can disable the email-based forgot/reset password
+    | flow entirely (no SMTP configured). Local Docker keeps it enabled for
+    | testing with Mailpit.
+    |
+    */
+    'password_reset_enabled' => (bool) env('PASSWORD_RESET_ENABLED', true),
+
+    /*
+    |--------------------------------------------------------------------------
     | Password Confirmation Timeout
     |--------------------------------------------------------------------------
     |

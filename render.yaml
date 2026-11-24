@@ -112,26 +112,14 @@ services:
       - key: NEON_REALTIME_SECRET
         sync: false
 
-      # --- Mail: real SMTP (Mailpit is local-development only) -------------
-      # Fill these from your email provider (cPanel mailbox, Gmail app
-      # password, Resend, Mailgun, ...). For port 465 use MAIL_SCHEME=smtps;
-      # for port 587 use MAIL_SCHEME=smtp.
+      # --- Email / forgot-password disabled in production ------------------
+      # Mailpit is local-Docker only. No SMTP credentials are configured on
+      # Render; the API rejects forgot/reset-password (404) and the SPA hides
+      # the link. Set PASSWORD_RESET_ENABLED=true + SMTP vars to re-enable.
+      - key: PASSWORD_RESET_ENABLED
+        value: "false"
       - key: MAIL_MAILER
-        value: smtp
-      - key: MAIL_HOST
-        sync: false
-      - key: MAIL_PORT
-        sync: false
-      - key: MAIL_SCHEME
-        sync: false
-      - key: MAIL_USERNAME
-        sync: false
-      - key: MAIL_PASSWORD
-        sync: false
-      - key: MAIL_FROM_ADDRESS
-        value: no-reply@gaisano-cordova.com
-      - key: MAIL_FROM_NAME
-        value: "Online Mall Cordova"
+        value: log
 
     # Free Render services have an ephemeral filesystem. Attach a paid disk if
     # uploads must persist locally, or migrate media to Neon Object Storage.

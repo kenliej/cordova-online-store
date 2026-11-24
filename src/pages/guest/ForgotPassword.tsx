@@ -1,8 +1,9 @@
 import { useState, type FormEvent } from "react";
-import { Link, useNavigate, useParams, useSearchParams } from "react-router";
+import { Link, Navigate, useNavigate, useParams, useSearchParams } from "react-router";
 import { Mail, Lock, ShoppingCart, Store, ShieldCheck, MapPin, CheckCircle2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getErrorMessage, getFieldErrors, isApiError, requestPasswordReset, resetPassword } from "@/lib/api";
+import { isPasswordResetEnabled } from "@/lib/features";
 import logoImage from "@/assets/logo.webp";
 import bgImage from "@/assets/bg-img1.webp";
 
@@ -27,6 +28,12 @@ export default function ForgotPassword() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [isResetting, setIsResetting] = useState(false);
   const [resetDone, setResetDone] = useState(false);
+
+  // Production (split/token) deployments have no SMTP configured: send the
+  // visitor back to login instead of showing a reset form that cannot send mail.
+  if (!isPasswordResetEnabled) {
+    return <Navigate to="/login" replace />;
+  }
 
   const handleRequestReset = async (event: FormEvent) => {
     event.preventDefault();

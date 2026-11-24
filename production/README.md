@@ -85,22 +85,32 @@ Result from `neon:probe`:
 Health check through the running container: `GET /api/health` -> HTTP 200
 `{"status":"ok","database":"ok"}`. Frontend `npm run build` passes.
 
-## Mailpit vs production email
+## Email & password reset: disabled in production
 
-**Mailpit runs only in local Docker** (`docker-compose.yml`, http://127.0.0.1:8025).
-It is an SMTP sink for development; **do not deploy it to Render**.
+**Mailpit is local-Docker only.** Production has **no SMTP provider** by design:
 
-- Render exposes HTTP ports only, and the API connects to Mailpit over SMTP, so a
-  Render-hosted Mailpit is not reachable in the way the app needs.
-- Production emails (password resets) must use a **real SMTP account**:
-  - cPanel mailbox: host `mail.yourdomain.com`, port `587` (`MAIL_SCHEME=smtp`) or
-    `465` (`MAIL_SCHEME=smtps`), username = full email address
-  - Gmail: `smtp.gmail.com`, port `587`, Gmail **app password**
-  - or Resend/Mailgun/Brevo SMTP credentials
-- Set these in Render (the Blueprint prompts for them):
-  `MAIL_MAILER=smtp`, `MAIL_HOST`, `MAIL_PORT`, `MAIL_SCHEME`,
-  `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_FROM_ADDRESS`.
-- Local Docker keeps using Mailpit; only the Render service uses real SMTP.
+- Render Blueprint sets `PASSWORD_RESET_ENABLED=false` and `MAIL_MAILER=log`.
+- The API returns **404** for `POST /api/auth/forgot-password` and
+  `POST /api/auth/reset-password`.
+- The React UI hides **Forgot Password?** in token/split deployments (Vercel),
+  and `/forgot-password` redirects to `/login`.
+- Local Docker (cookie auth) keeps Mailpit + the reset flow for testing at
+  http://127.0.0.1:8025.
+
+To re-enable later, set on Render:
+
+```dotenv
+PASSWORD_RESET_ENABLED=true
+MAIL_MAILER=smtp
+MAIL_HOST=...        # e.g. mail.yourdomain.com / smtp.gmail.com
+MAIL_PORT=587        # 465 with MAIL_SCHEME=smtps
+MAIL_SCHEME=smtp
+MAIL_USERNAME=...
+MAIL_PASSWORD=...
+MAIL_FROM_ADDRESS=no-reply@gaisano-cordova.com
+```
+
+and set `VITE_PASSWORD_RESET_ENABLED=true` in Vercel, then redeploy both.
 
 ## Deploy the frontend on Vercel
 

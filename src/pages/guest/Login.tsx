@@ -4,6 +4,7 @@ import { Mail, Lock, Eye, EyeOff, ShoppingCart, Store, ShieldCheck, MapPin, Aler
 import { Button } from "@/components/ui/button";
 import { useAuth, roleHomePath } from "@/context/AuthContext";
 import { getErrorMessage, getFieldErrors, isApiError } from "@/lib/api";
+import { isPasswordResetEnabled } from "@/lib/features";
 import logoImage from "@/assets/logo.webp";
 import bgImage from "@/assets/bg-img1.webp";
 
@@ -236,9 +237,11 @@ export default function Login() {
                 />
                 <span>Remember me</span>
               </label>
-              <Link to="/forgot-password" className="text-[#3087C5] hover:underline">
-                Forgot Password?
-              </Link>
+              {isPasswordResetEnabled && (
+                <Link to="/forgot-password" className="text-[#3087C5] hover:underline">
+                  Forgot Password?
+                </Link>
+              )}
             </div>
 
             {/* Main Log In Button */}

@@ -19,6 +19,8 @@ class PasswordResetController extends Controller
 {
     public function sendResetLinkEmail(ForgotPasswordRequest $request): JsonResponse
     {
+        $this->ensurePasswordResetEnabled();
+
         try {
             Password::broker()->sendResetLink([
                 'email' => (string) $request->validated('email'),
@@ -33,8 +35,18 @@ class PasswordResetController extends Controller
         ]);
     }
 
+    /**
+     * Production deployments without an SMTP provider disable the whole flow.
+     */
+    private function ensurePasswordResetEnabled(): void
+    {
+        abort_unless(config('auth.password_reset_enabled', true), 404, 'Password reset is disabled.');
+    }
+
     public function reset(ResetPasswordRequest $request): JsonResponse
     {
+        $this->ensurePasswordResetEnabled();
+
         $status = Password::broker()->reset(
             $request->only(['email', 'password', 'password_confirmation', 'token']),
             function (User $user, string $password): void {
