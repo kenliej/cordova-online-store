@@ -67,6 +67,8 @@ docker/mysql/data
 # ---------------------------------------------------------------------------
 # Deployment build artifacts
 # ---------------------------------------------------------------------------
+docs/
+deploy/
 .cpanel-build/
 dist-cpanel/
 dist-cpanel-frontend/
@@ -77,6 +79,3 @@ test-results/
 
 # Local PostgreSQL binaries/data used for verification (never commit)
 .tools/
-
-docker/
-deploy/
