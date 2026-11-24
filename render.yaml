@@ -54,17 +54,9 @@ services:
         sync: false
       - key: DATABASE_URL_UNPOOLED
         sync: false
-      - key: DB_URL
-        sync: false
-      # Optional separate credentials (only if not using DATABASE_URL)
-      - key: DB_HOST
-        sync: false
-      - key: DB_DATABASE
-        sync: false
-      - key: DB_USERNAME
-        sync: false
-      - key: DB_PASSWORD
-        sync: false
+      # DB_HOST / DB_DATABASE / DB_USERNAME / DB_PASSWORD are only needed if
+      # you use separate credentials instead of DATABASE_URL. The app reads
+      # DATABASE_URL directly, so they are intentionally not prompted here.
 
       # --- Sessions / cache / queue ---------------------------------------
       - key: SESSION_DRIVER
