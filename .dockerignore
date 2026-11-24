@@ -43,3 +43,24 @@ README.md
 *.md
 docker-compose*.yml
 .env.example
+
+# Local tooling / verification state (must never enter the build context)
+.tools
+backups
+test-results
+dist-deploy
+dist-cpanel
+dist-cpanel-frontend
+dist-e2e-split
+.cpanel-build
+.neon
+neon.ts
+package.json
+package-lock.json
+tsconfig*.json
+vite.config.ts
+eslint.config.js
+src
+public
+tests
+

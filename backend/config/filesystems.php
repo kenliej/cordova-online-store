@@ -48,6 +48,22 @@ return [
             'report' => false,
         ],
 
+        /*
+        | Neon Object Storage (S3-compatible, branch-scoped).
+        | Credentials/endpoint/region are injected by Neon as AWS_* variables;
+        | path-style addressing is required by the Neon endpoint.
+        */
+        'neon' => [
+            'driver' => 's3',
+            'key' => env('AWS_ACCESS_KEY_ID'),
+            'secret' => env('AWS_SECRET_ACCESS_KEY'),
+            'region' => env('AWS_REGION', 'us-east-2'),
+            'bucket' => env('NEON_OBJECT_STORAGE_BUCKET', 'assets'),
+            'endpoint' => env('AWS_ENDPOINT_URL_S3'),
+            'use_path_style_endpoint' => true,
+            'throw' => true,
+        ],
+
     ],
 
     /*

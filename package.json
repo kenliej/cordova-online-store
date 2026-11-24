@@ -25,6 +25,8 @@
     "test:e2e:local": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-e2e.ps1"
   },
   "dependencies": {
+    "@neon/config": "^1.14.6",
+    "@neon/env": "^2.1.9",
     "@tailwindcss/vite": "^4.3.4",
     "axios": "^1.21.1",
     "clsx": "^2.1.1",

@@ -79,3 +79,8 @@ test-results/
 
 # Local PostgreSQL binaries/data used for verification (never commit)
 .tools/
+.neon
+
+# Local source backups (tag/zip made before production work)
+backups/
+.env.backup-*
