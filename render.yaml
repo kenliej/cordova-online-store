@@ -37,7 +37,7 @@ services:
       - key: LOG_LEVEL
         value: info
       - key: TRUSTED_HOSTS
-        value: "*.onrender.com,localhost"
+        value: "gaisano-onlinemall-api.onrender.com,localhost,127.0.0.1"
       - key: TRUSTED_PROXIES
         value: "*"
 

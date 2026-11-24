@@ -139,6 +139,21 @@ Finally, set Render's `APP_FRONTEND_URL` and `CORS_ALLOWED_ORIGINS` to the exact
 Vercel URL (e.g. `https://gaisano-onlinemall.vercel.app`), redeploy Render, then
 open the Vercel app and log in with a seeded/created admin account.
 
+## Troubleshooting: `preg_match(): Compilation failed: quantifier does not follow a repeatable item`
+
+This means `TRUSTED_HOSTS` contains an invalid host pattern - usually a glob such
+as `*.onrender.com`. Laravel passes these values to Symfony as **regular
+expressions**, where `*` cannot start the pattern.
+
+Use the **exact Render hostname** instead:
+
+```dotenv
+TRUSTED_HOSTS=gaisano-onlinemall-api.onrender.com,localhost,127.0.0.1
+```
+
+Comma-separate exact hosts only. If you rename the service or add a custom
+domain, add that exact hostname here and redeploy.
+
 ## Known limitations
 
 - **Uploads:** Render's free filesystem is ephemeral; the app still stores uploads
