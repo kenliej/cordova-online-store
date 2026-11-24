@@ -62,6 +62,7 @@ if ([string]::IsNullOrWhiteSpace($scriptDir)) { $scriptDir = Split-Path -Parent 
 $repo = Split-Path -Parent $scriptDir
 $composeFile = Join-Path $repo "docker-compose.yml"
 $envExample = Join-Path $repo ".env.example"
+$logDir = Join-Path $repo "test-results\logs"
 if (-not $EnvFile) { $EnvFile = Join-Path $repo ".env" }
 elseif (-not [System.IO.Path]::IsPathRooted($EnvFile)) { $EnvFile = Join-Path $repo $EnvFile }
 
@@ -144,6 +145,164 @@ function Invoke-Compose {
     return $code
 }
 
+# ---------------------------------------------------------------------------
+# Realtime console UI: spinner + elapsed time + last Docker build line.
+# ---------------------------------------------------------------------------
+$script:IsInteractiveConsole = $true
+try { $script:IsInteractiveConsole = -not [Console]::IsOutputRedirected } catch { }
+$script:TaskStart = Get-Date
+$script:TaskTitle = ""
+$script:Spinner = @("|", "/", "-", "\")
+$script:SpinnerIndex = 0
+
+function Format-Duration([TimeSpan]$Span) {
+    if ($Span.TotalMinutes -ge 1) {
+        return ("{0:00}:{1:00}" -f [int][Math]::Floor($Span.TotalMinutes), $Span.Seconds)
+    }
+    return ("{0:0.0}s" -f $Span.TotalSeconds)
+}
+
+function Clear-SpinnerLine {
+    if (-not $script:IsInteractiveConsole) { return }
+    $width = 1
+    try { $width = [Math]::Max(20, [Console]::WindowWidth - 1) } catch { }
+    Write-Host ("`r" + (" " * $width) + "`r") -NoNewline
+}
+
+function Write-TaskLine([string]$Text, [ConsoleColor]$Color = [ConsoleColor]::Gray) {
+    Clear-SpinnerLine
+    Write-Host $Text -ForegroundColor $Color
+}
+
+function Start-Task([string]$Title) {
+    $script:TaskTitle = $Title
+    $script:TaskStart = Get-Date
+    $script:SpinnerIndex = 0
+    if (-not $script:IsInteractiveConsole) {
+        Write-Host "  [..] $Title" -ForegroundColor DarkGray
+    }
+}
+
+function Update-Task([string]$Detail = "") {
+    if (-not $script:IsInteractiveConsole) { return }
+    $elapsed = (Get-Date) - $script:TaskStart
+    $frame = $script:Spinner[$script:SpinnerIndex % $script:Spinner.Count]
+    $script:SpinnerIndex++
+    $width = 1
+    try { $width = [Math]::Max(30, [Console]::WindowWidth - 1) } catch { }
+    $line = "  $frame $($script:TaskTitle)  [$((Format-Duration $elapsed))]"
+    if ($Detail) { $line += "  $Detail" }
+    if ($line.Length -gt $width) { $line = $line.Substring(0, $width - 1) }
+    Write-Host ("`r" + $line.PadRight($width)) -NoNewline -ForegroundColor Cyan
+}
+
+function Complete-Task([string]$Detail = "") {
+    $elapsed = (Get-Date) - $script:TaskStart
+    $text = "  [OK] $($script:TaskTitle)  ($(Format-Duration $elapsed))"
+    if ($Detail) { $text += " - $Detail" }
+    Write-TaskLine $text Green
+}
+
+function Fail-Task([string]$Detail = "") {
+    $elapsed = (Get-Date) - $script:TaskStart
+    $text = "  [FAIL] $($script:TaskTitle)  ($(Format-Duration $elapsed))"
+    if ($Detail) { $text += " - $Detail" }
+    Write-TaskLine $text Red
+}
+
+function Get-LastLogLine([string[]]$Paths) {
+    foreach ($path in $Paths) {
+        if (-not (Test-Path -LiteralPath $path)) { continue }
+        try {
+            $tail = Get-Content -LiteralPath $path -Tail 3 -ErrorAction Stop
+            if ($tail) {
+                for ($i = $tail.Count - 1; $i -ge 0; $i--) {
+                    $candidate = ($tail[$i] -replace '\x1B\[[0-9;]*[A-Za-z]', '') -replace '\s+', ' '
+                    $candidate = $candidate.Trim()
+                    if ($candidate) { return $candidate }
+                }
+            }
+        } catch { }
+    }
+    return ""
+}
+
+# Runs a long docker compose command with a live spinner and shows the last
+# Docker output line while working. Full output is saved under test-results/logs.
+function Invoke-ComposeWithProgress {
+    param(
+        [Parameter(Mandatory = $true)][string]$Title,
+        [Parameter(Mandatory = $true)][string[]]$Arguments,
+        [string]$LogName = "docker-compose"
+    )
+    if ($DryRun) {
+        Write-Host ("  [dry-run] docker compose {0}" -f ($Arguments -join ' ')) -ForegroundColor DarkGray
+        return 0
+    }
+    if (-not (Test-Path -LiteralPath $logDir)) {
+        New-Item -ItemType Directory -Path $logDir -Force | Out-Null
+    }
+    $outLog = Join-Path $logDir "$LogName.out.log"
+    $errLog = Join-Path $logDir "$LogName.err.log"
+    $exitFile = Join-Path $logDir "$LogName.exitcode.txt"
+    $runner = Join-Path $logDir "$LogName.cmd"
+    Remove-Item $outLog, $errLog, $exitFile, $runner -Force -ErrorAction SilentlyContinue
+
+    # Windows PowerShell 5.1's Start-Process -PassThru does not expose ExitCode
+    # for native commands. Run through a tiny .cmd wrapper that writes the code
+    # to a file; stdout/stderr are redirected so we can show the latest line.
+    $argumentLine = $Arguments -join ' '
+    $runnerLines = @(
+        '@echo off',
+        ('docker compose -f "{0}" {1} > "{2}" 2> "{3}"' -f $composeFile, $argumentLine, $outLog, $errLog),
+        ('echo %ERRORLEVEL% > "{0}"' -f $exitFile)
+    )
+    [System.IO.File]::WriteAllLines($runner, $runnerLines, (New-Object System.Text.ASCIIEncoding))
+
+    Start-Task $Title
+    $process = Start-Process -FilePath "cmd.exe" -ArgumentList @("/d", "/c", "`"$runner`"") `
+        -WorkingDirectory $repo -WindowStyle Hidden -PassThru
+    $lastDetail = ""
+    $lastDetailUpdate = Get-Date
+    while (-not $process.HasExited) {
+        Update-Task $lastDetail
+        $now = Get-Date
+        if (($now - $lastDetailUpdate).TotalMilliseconds -ge 500) {
+            $line = Get-LastLogLine @($errLog, $outLog)
+            if ($line -and $line -ne $lastDetail) { $lastDetail = $line }
+            $lastDetailUpdate = $now
+        }
+        Start-Sleep -Milliseconds 150
+    }
+    $process.WaitForExit()
+
+    $code = $null
+    for ($attempt = 0; $attempt -lt 20 -and $null -eq $code; $attempt++) {
+        if (Test-Path -LiteralPath $exitFile) {
+            $raw = [System.IO.File]::ReadAllText($exitFile)
+            if ($raw -match '-?\d+') { $code = [int]$Matches[0] }
+        }
+        if ($null -eq $code) { Start-Sleep -Milliseconds 50 }
+    }
+    if ($null -eq $code) { $code = 1 }
+
+    if ($code -ne 0) {
+        Fail-Task "exit code $code"
+        Write-Host "  --- last Docker output ---" -ForegroundColor DarkRed
+        Get-Content -LiteralPath $errLog -Tail 25 -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "  $_" -ForegroundColor DarkGray }
+        Get-Content -LiteralPath $outLog -Tail 25 -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "  $_" -ForegroundColor DarkGray }
+        throw ("docker compose {0} failed (exit {1})" -f ($Arguments -join ' '), $code)
+    }
+    Complete-Task
+    return $code
+}
+
+$script:SetupStart = Get-Date
+Write-Host ""
+Write-Host "  +--------------------------------------------------------------+" -ForegroundColor Cyan
+Write-Host "  |   ONLINE MALL CORDOVA   -   Docker setup / launch             |" -ForegroundColor Cyan
+Write-Host "  +--------------------------------------------------------------+" -ForegroundColor Cyan
+
 # --- prerequisite checks -----------------------------------------------------
 if (-not $DryRun) {
     if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
@@ -225,7 +384,7 @@ Write-Step "Building and starting PostgreSQL, API, frontend, queue, scheduler, M
 Write-Host "  The first build downloads images and takes several minutes. Be patient!" -ForegroundColor DarkGray
 $upArguments = @("up", "-d")
 if (-not $SkipBuild) { $upArguments += "--build" }
-$null = Invoke-Compose $upArguments
+$null = Invoke-ComposeWithProgress -Title "Building images and starting containers" -Arguments $upArguments -LogName "docker-up"
 
 if ($DryRun) {
     if (-not $NoDbUi) {
@@ -240,8 +399,11 @@ if ($DryRun) {
 Write-Step "Waiting for the application to become healthy (up to 5 minutes)"
 $healthUrl = "http://localhost:$webPort/api/health"
 $healthy = $false
+$attempts = 0
 $deadline = (Get-Date).AddMinutes(5)
+Start-Task "Waiting for the app to answer /api/health"
 while ((Get-Date) -lt $deadline) {
+    $attempts++
     try {
         $response = Invoke-WebRequest -Uri $healthUrl -UseBasicParsing -TimeoutSec 5
         if ($response.StatusCode -eq 200 -and $response.Content -match '"status"\s*:\s*"ok"') {
@@ -249,26 +411,28 @@ while ((Get-Date) -lt $deadline) {
             break
         }
     } catch { }
-    Start-Sleep -Seconds 5
+    Update-Task "check $attempts"
+    Start-Sleep -Seconds 2
 }
 
 if (-not $healthy) {
+    Fail-Task "timed out after 5 minutes"
     Write-Host "The stack did not become healthy in time." -ForegroundColor Red
     $null = Invoke-DockerCli -Arguments @("compose", "-f", $composeFile, "ps")
     $null = Invoke-DockerCli -Arguments @("compose", "-f", $composeFile, "logs", "--tail=80", "app", "web")
     throw "Health check failed: $healthUrl"
 }
-Write-Host "  application is healthy" -ForegroundColor Green
+Complete-Task "healthy after $attempts check(s)"
 
 # --- seed demo data only when empty -----------------------------------------
 Write-Step "Seeding demo data (only when the database is empty)"
-$null = Invoke-Compose @("exec", "-T", "app", "php", "artisan", "app:seed-demo", "--force")
+$null = Invoke-ComposeWithProgress -Title "Seeding demo data" -Arguments @("exec", "-T", "app", "php", "artisan", "app:seed-demo", "--force") -LogName "docker-seed"
 
 # --- optional database web UI ------------------------------------------------
 if (-not $NoDbUi) {
     Write-Step "Starting the database web UI (Adminer)"
     try {
-        $null = Invoke-Compose @("--profile", "tools", "up", "-d", "adminer")
+        $null = Invoke-ComposeWithProgress -Title "Starting database web UI (Adminer)" -Arguments @("--profile", "tools", "up", "-d", "adminer") -LogName "docker-adminer"
     } catch {
         Write-Host "  warning: Adminer could not start: $($_.Exception.Message)" -ForegroundColor Yellow
         Write-Host "  The app is still running; start it later with: npm run docker:db-ui" -ForegroundColor DarkGray
@@ -276,10 +440,11 @@ if (-not $NoDbUi) {
 }
 
 # --- summary -----------------------------------------------------------------
+$totalElapsed = (Get-Date) - $script:SetupStart
 Write-Host ""
-Write-Host "  ============================================================" -ForegroundColor Green
-Write-Host "   ONLINE MALL CORDOVA - Docker stack is running" -ForegroundColor Green
-Write-Host "  ============================================================" -ForegroundColor Green
+Write-Host "  +--------------------------------------------------------------+" -ForegroundColor Green
+Write-Host "  |   ONLINE MALL CORDOVA   -   Docker stack is running           |" -ForegroundColor Green
+Write-Host "  +--------------------------------------------------------------+" -ForegroundColor Green
 Write-Host "   App          : http://localhost:$webPort" -ForegroundColor Cyan
 Write-Host "   API health   : http://localhost:$webPort/api/health" -ForegroundColor Cyan
 Write-Host "   Mailpit      : http://127.0.0.1:$mailpitPort (password-reset e-mails)" -ForegroundColor Cyan
@@ -288,6 +453,7 @@ if ($NoDbUi) {
 } else {
     Write-Host "   Database UI  : http://127.0.0.1:$adminerPort/?pgsql=db" -ForegroundColor Cyan
 }
+Write-Host "   Ready in     : $(Format-Duration $totalElapsed)" -ForegroundColor Green
 Write-Host ""
 Write-Host "   Demo accounts (all @gaisano-cordova.com)"
 Write-Host "     admins   : admin@, admin-kenlie@, admin-sherwynn@, admin-dudes@, admin-charlie@  / admin@0912345"

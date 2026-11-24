@@ -61,14 +61,16 @@ npm run docker:up
 
 What it does:
 
-1. Checks that Docker Desktop is running.
+1. Checks that Docker Desktop is running (with a live spinner for long operations).
 2. Creates `.env` from `.env.example` if missing.
 3. Generates **APP_KEY** and a random **DB_PASSWORD** into `.env` (only if empty).
 4. Builds the images and starts PostgreSQL, the API, nginx/frontend, queue, scheduler
-   and Mailpit.
+   and Mailpit. The console shows a spinning cursor, elapsed time and the latest Docker
+   build line while it works.
 5. Waits until `http://localhost:8080/api/health` reports `"status":"ok"`.
 6. Seeds demo accounts/products/orders **only if the database is empty** (safe to run
    again; it will not duplicate data).
+7. Starts the Adminer database UI (skip with `-NoDbUi`).
 
 > The **first** build downloads images and compiles PHP extensions + the React app, so it
 > can take 5-15 minutes. Later starts take seconds.
