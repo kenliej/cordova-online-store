@@ -77,6 +77,13 @@ services:
         value: database
       - key: FILESYSTEM_DISK
         value: local
+      # Persist uploads in Neon Object Storage instead of Render's ephemeral disk.
+      - key: MEDIA_DISK
+        value: neon
+      - key: NEON_PUBLIC_BUCKET
+        value: media
+      - key: NEON_PRIVATE_BUCKET
+        value: uploads
       - key: RUN_MIGRATIONS
         value: "true"
 
@@ -123,9 +130,6 @@ services:
       - key: MAIL_MAILER
         value: log
 
-    # Free Render services have an ephemeral filesystem. Attach a paid disk if
-    # uploads must persist locally, or migrate media to Neon Object Storage.
-    # disk:
-    #   name: media
-    #   mountPath: /var/www/html/storage/app
-    #   sizeGB: 1
+    # Uploads are stored in Neon Object Storage (MEDIA_DISK=neon), so no Render
+    # persistent disk is needed. Render's local filesystem is only used for
+    # framework cache/logs and is intentionally ephemeral.

@@ -40,6 +40,8 @@ Render web service (production/Dockerfile: nginx + php-fpm)
    - `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_ENDPOINT_URL_S3`, `AWS_REGION`
    - `NEON_AI_GATEWAY_BASE_URL`, `NEON_AI_GATEWAY_TOKEN`
    - `NEON_REALTIME_URL`, `NEON_REALTIME_SECRET`
+   - `AWS_*` values from the current project `.env` (after `neon deploy` these
+     credentials can rotate — update Render whenever they do)
 4. Deploy. The container runs migrations on the direct Neon URL, then starts on
    Render's `$PORT` (default 10000).
 5. Verify: `https://<service>.onrender.com/api/health` returns
@@ -173,11 +175,50 @@ asks for the **direct** Neon URL in both database variables.
   start script switches the app to it automatically after migrations.
 - Do not use the `-pooler` URL for Render.
 
+## Persistent media on Render (Neon Object Storage)
+
+Render's container filesystem is ephemeral, so uploaded images are stored in
+**Neon Object Storage** instead:
+
+- `MEDIA_DISK=neon` on Render switches the `public` and `private` Laravel disks
+  to S3-compatible Neon buckets.
+- Public bucket **`media`** (`public_read`): product images, store images,
+  profile avatars. The DB stores the object key; the API returns the full public
+  URL (`https://<branch>.storage.../media/<path>`).
+- Private bucket **`uploads`**: government ID scans. They are never public; the
+  API streams them only to the owner/admin.
+- Local Docker does not set `MEDIA_DISK`, so it keeps using local disk + Mailpit.
+- Uploads were verified to survive a Render container restart.
+
+Neon bucket definitions are in `neon.ts` (`media` public, `uploads` private,
+`assets` private for the probe). Run `neon deploy` after changing them.
+
+## Existing catalog data imported into Neon
+
+The local catalog was copied into the Neon production database **without
+accounts or orders**:
+
+| Table | Rows |
+|---|---|
+| categories | 27 |
+| stores | 10 |
+| store_images | 19 |
+| store_highlights | 10 |
+| products | 12 |
+| product_images | 14 |
+| product_highlights | 12 |
+
+- Product `created_by` is null (no worker accounts were imported).
+- The existing Neon admin account was preserved (not touched).
+- Customer accounts, workers, orders, carts, sessions and audit logs were not
+  copied.
+- Existing catalog image paths are public Unsplash URLs, so they work as-is.
+
 ## Known limitations
 
-- **Uploads:** Render's free filesystem is ephemeral; the app still stores uploads
-  locally. Attach a Render persistent disk (paid plans; see commented `disk:` in
-  `render.yaml`) or migrate the upload paths to the Neon `assets` bucket.
+- **Uploads:** Solved on Render via Neon Object Storage (`media` public bucket +
+  `uploads` private bucket). Local Docker keeps using local disk. Render's
+  ephemeral filesystem is only used for framework cache/logs.
 - **AI Gateway:** account has no credits, so all models are currently disabled.
 - **Realtime:** credentials are deployed, but the app has no live-query UI; the
   current notification flow uses polling.

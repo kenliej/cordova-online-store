@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * Image-path conventions shared by the commerce serializers.
@@ -24,6 +25,12 @@ class CommerceImageService
 
         if (preg_match('#^(https?:)?//#i', $path) === 1 || str_starts_with($path, 'data:')) {
             return $path;
+        }
+
+        // Neo/Neon object storage returns an absolute public URL; local disks
+        // keep the relative path so the dev proxy / nginx can serve it.
+        if (config('filesystems.disks.public.driver') === 's3') {
+            return Storage::disk('public')->url($path);
         }
 
         return '/storage/'.ltrim($path, '/');

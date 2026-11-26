@@ -36,6 +36,12 @@ class MediaController extends Controller
 
         $disk = Storage::disk('public');
 
+        // Neon Object Storage objects are already public; avoid trying to read
+        // a local path from the S3 filesystem.
+        if (config('filesystems.disks.public.driver') === 's3') {
+            return redirect()->away($disk->url($path));
+        }
+
         if (! $disk->exists($path)) {
             abort(404);
         }

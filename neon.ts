@@ -8,8 +8,12 @@ export default defineConfig({
   auth: false,
   aiGateway: true,
   buckets: {
-    // "private" is the default; use "public_read" for anonymous reads
+    // Existing probe/legacy bucket stays private.
     assets: { access: "private" },
+    // Public product/store/avatar media: anonymous reads, authenticated writes.
+    media: { access: "public_read" },
+    // Sensitive government-ID scans: never public, streamed through the API.
+    uploads: { access: "private" },
   },
   // Branch policy: per-branch tuning
   branch: (branch) => {

@@ -14,7 +14,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
-use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * Self-service profile for every authenticated role.
@@ -69,7 +69,7 @@ class ProfileController extends Controller
      * Stream a private ID scan. Only the owner or an administrator may read it;
      * anybody else gets a 404 (no IDOR enumeration, no public URL).
      */
-    public function downloadIdDocument(Request $request, IdDocument $document): BinaryFileResponse
+    public function downloadIdDocument(Request $request, IdDocument $document): StreamedResponse
     {
         if (! Gate::allows('download', $document)) {
             abort(404, 'Resource not found.');
@@ -83,11 +83,10 @@ class ProfileController extends Controller
 
         $filename = $document->original_name ?: basename($document->path);
 
-        return response()
-            ->file($disk->path($document->path), [
-                'Content-Type' => $document->mime ?: 'application/octet-stream',
-                'Cache-Control' => 'private, no-store, max-age=0',
-            ])
-            ->setContentDisposition('inline', $filename);
+        // Works for both the local private disk and Neon's private S3 bucket.
+        return $disk->response($document->path, $filename, [
+            'Content-Type' => $document->mime ?: 'application/octet-stream',
+            'Cache-Control' => 'private, no-store, max-age=0',
+        ]);
     }
 }
